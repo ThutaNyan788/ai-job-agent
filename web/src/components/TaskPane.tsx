@@ -205,12 +205,14 @@ export function TaskPane({
   error,
   send,
   sessionId,
+  onJobSelect,
 }: {
   events: AgentEvent[];
   connected: boolean;
   error: string | null;
   send: (message: ClientMessage) => boolean;
   sessionId: string;
+  onJobSelect: (job: JobMatch) => void;
 }) {
   const [input, setInput] = useState("");
   const { turns, running } = toTranscript(events);
@@ -256,7 +258,7 @@ export function TaskPane({
             </p>
           )}
           {turns.map((turn) => (
-            <TurnView key={turn.id} turn={turn} />
+            <TurnView key={turn.id} turn={turn} onJobSelect={onJobSelect} />
           ))}
           {running && (
             <div className="px-1">
@@ -364,7 +366,7 @@ const SUBAGENT_LABEL: Record<SubagentState, string> = {
   failed: "failed",
 };
 
-function TurnView({ turn }: { turn: Turn }) {
+function TurnView({ turn, onJobSelect }: { turn: Turn; onJobSelect: (job: JobMatch) => void }) {
   switch (turn.role) {
     case "user":
       return (
@@ -379,7 +381,7 @@ function TurnView({ turn }: { turn: Turn }) {
     case "tool":
       return <Tool toolPart={turn.part} />;
     case "jobMatches":
-      return <JobMatchCards jobs={turn.jobs} />;
+      return <JobMatchCards jobs={turn.jobs} onJobSelect={onJobSelect} />;
     case "supervision":
       return (
         <div className="space-y-2">
@@ -440,7 +442,13 @@ function TurnView({ turn }: { turn: Turn }) {
   }
 }
 
-function JobMatchCards({ jobs }: { jobs: JobMatch[] }) {
+function JobMatchCards({
+  jobs,
+  onJobSelect,
+}: {
+  jobs: JobMatch[];
+  onJobSelect: (job: JobMatch) => void;
+}) {
   if (jobs.length === 0) {
     return <p className="text-muted-foreground text-sm">No matching jobs found in the demo catalog.</p>;
   }
@@ -448,7 +456,12 @@ function JobMatchCards({ jobs }: { jobs: JobMatch[] }) {
   return (
     <div className="space-y-2">
       {jobs.map((job) => (
-        <article key={job.id} className="rounded-lg border bg-card p-3 text-sm">
+        <button
+          key={job.id}
+          type="button"
+          className="hover:bg-muted/50 focus-visible:ring-ring w-full rounded-lg border bg-card p-3 text-left text-sm transition-colors focus-visible:ring-2 focus-visible:ring-offset-2"
+          onClick={() => onJobSelect(job)}
+        >
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <h3 className="font-medium">{job.title}</h3>
@@ -469,7 +482,7 @@ function JobMatchCards({ jobs }: { jobs: JobMatch[] }) {
               </span>
             ))}
           </div>
-        </article>
+        </button>
       ))}
     </div>
   );

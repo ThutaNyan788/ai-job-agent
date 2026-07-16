@@ -2,6 +2,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { pgTable, bigserial, jsonb, real, text } from "drizzle-orm/pg-core";
 import type { AgentEvent } from "@shared/events";
+import type { ApplicationStatus } from "@shared/events";
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
@@ -32,6 +33,20 @@ export const candidateProfiles = pgTable("candidate_profiles", {
   experienceYears: real("experience_years"),
 });
 
+export type ApplicationRecord = {
+  sessionId: string;
+  jobId: string;
+  workflowId: string;
+  status: ApplicationStatus;
+};
+
+export const applications = pgTable("applications", {
+  sessionId: text("session_id").notNull(),
+  jobId: text("job_id").notNull(),
+  workflowId: text("workflow_id").notNull(),
+  status: text("status").$type<ApplicationStatus>().notNull(),
+});
+
 // Create the table on boot. Keeps the workshop migration-free; in a real app
 // you'd use Drizzle migrations instead.
 export async function ensureSchema(): Promise<void> {
@@ -39,6 +54,15 @@ export async function ensureSchema(): Promise<void> {
     CREATE TABLE IF NOT EXISTS event_log (
       seq  bigserial PRIMARY KEY,
       data jsonb NOT NULL
+    )
+  `;
+  await client`
+    CREATE TABLE IF NOT EXISTS applications (
+      session_id text NOT NULL,
+      job_id text NOT NULL,
+      workflow_id text NOT NULL,
+      status text NOT NULL CHECK (status IN ('pending', 'submitted', 'cancelled')),
+      PRIMARY KEY (session_id, job_id)
     )
   `;
   await client`
@@ -92,4 +116,54 @@ export async function saveCandidateProfile(
 
 export async function clearCandidateProfile(sessionId: string): Promise<void> {
   await client`DELETE FROM candidate_profiles WHERE session_id = ${sessionId}`;
+  await client`DELETE FROM applications WHERE session_id = ${sessionId}`;
+}
+
+function rowToApplication(row: {
+  session_id: string;
+  job_id: string;
+  workflow_id: string;
+  status: ApplicationStatus;
+}): ApplicationRecord {
+  return {
+    sessionId: row.session_id,
+    jobId: row.job_id,
+    workflowId: row.workflow_id,
+    status: row.status,
+  };
+}
+
+export async function ensureApplication(
+  sessionId: string,
+  jobId: string,
+  workflowId: string,
+): Promise<ApplicationRecord> {
+  await client`
+    INSERT INTO applications (session_id, job_id, workflow_id, status)
+    VALUES (${sessionId}, ${jobId}, ${workflowId}, 'pending')
+    ON CONFLICT (session_id, job_id) DO NOTHING
+  `;
+  const rows = await client<{
+    session_id: string;
+    job_id: string;
+    workflow_id: string;
+    status: ApplicationStatus;
+  }[]>`
+    SELECT session_id, job_id, workflow_id, status
+    FROM applications WHERE session_id = ${sessionId} AND job_id = ${jobId}
+  `;
+  return rowToApplication(rows[0]);
+}
+
+export async function resolveApplication(
+  sessionId: string,
+  jobId: string,
+  workflowId: string,
+  status: Extract<ApplicationStatus, "submitted" | "cancelled">,
+): Promise<ApplicationRecord> {
+  await client`
+    UPDATE applications SET status = ${status}
+    WHERE session_id = ${sessionId} AND job_id = ${jobId} AND workflow_id = ${workflowId}
+  `;
+  return ensureApplication(sessionId, jobId, workflowId);
 }

@@ -10,7 +10,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test harness/jobs.test.ts",
+    "test": "tsx --test harness/jobs.test.ts harness/application-state.test.ts",
     "docs": "vitepress dev lessons --port 5174",
     "docs:build": "vitepress build lessons",
     "docs:preview": "vitepress preview lessons --port 4174"

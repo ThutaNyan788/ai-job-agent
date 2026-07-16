@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { Moon, Sun } from "lucide-react";
+import { EventType, type AgentEvent, type ApplicationStatusEvent, type JobMatch } from "@shared/events";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -6,10 +8,27 @@ import { useHarnessSocket } from "./useHarnessSocket";
 import { useTheme } from "./useTheme";
 import { TaskPane } from "./components/TaskPane";
 import { InspectorPane } from "./components/InspectorPane";
+import { JobDetailsPane } from "./components/JobDetailsPane";
 
 export function App() {
   const { events, connected, error, send, sessionId } = useHarnessSocket();
   const { theme, toggle } = useTheme();
+  const [selectedJob, setSelectedJob] = useState<JobMatch | null>(null);
+  const selectedApplication = selectedJob
+    ? latestApplication(events, sessionId, selectedJob.id)
+    : null;
+
+  function requestApplication(job: JobMatch) {
+    send({ type: "request_application", jobId: job.id, sessionId });
+  }
+
+  async function decideApplication(workflowId: string, approved: boolean) {
+    await fetch(`http://${location.hostname}:8787/api/approve/${workflowId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ approved }),
+    });
+  }
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -51,11 +70,36 @@ export function App() {
             error={error}
             send={send}
             sessionId={sessionId}
+            onJobSelect={setSelectedJob}
           />
           {/* do not delete */}
           {/* <InspectorPane events={events} /> */}
+          <JobDetailsPane
+            job={selectedJob}
+            application={selectedApplication}
+            onRequestApplication={requestApplication}
+            onDecideApplication={decideApplication}
+          />
         </main>
       </div>
     </TooltipProvider>
   );
+}
+
+function latestApplication(
+  events: AgentEvent[],
+  sessionId: string,
+  jobId: string,
+): ApplicationStatusEvent | null {
+  for (let index = events.length - 1; index >= 0; index--) {
+    const event = events[index];
+    if (
+      event.type === EventType.ApplicationStatus &&
+      event.sessionId === sessionId &&
+      event.jobId === jobId
+    ) {
+      return event;
+    }
+  }
+  return null;
 }

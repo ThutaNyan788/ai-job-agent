@@ -23,6 +23,7 @@ export enum EventType {
   ToolFailed = "tool.failed",
   // job matching: a ranked fictional-job shortlist ready for the chat UI
   JobMatches = "job.matches",
+  ApplicationStatus = "application.status",
   // memory: old turns compacted into a running summary
   MemoryCompacted = "memory.compacted",
   // orchestration: control handed from one agent to another
@@ -56,6 +57,15 @@ export type JobMatch = JobPost & {
   reason: string;
 };
 
+export type ApplicationStatus = "pending" | "submitted" | "cancelled";
+export type ApplicationStatusEvent = {
+  type: EventType.ApplicationStatus;
+  workflowId: string;
+  sessionId: string;
+  jobId: string;
+  status: ApplicationStatus;
+};
+
 export type EventInput =
   | { type: EventType.WorkflowStarted; workflowId: string; input: string }
   | { type: EventType.WorkflowCompleted; workflowId: string; output: string }
@@ -66,6 +76,7 @@ export type EventInput =
   | { type: EventType.ToolCompleted; workflowId: string; toolCallId: string; result: unknown }
   | { type: EventType.ToolFailed; workflowId: string; toolCallId: string; error: string }
   | { type: EventType.JobMatches; workflowId: string; jobs: JobMatch[] }
+  | ApplicationStatusEvent
   | { type: EventType.MemoryCompacted; workflowId: string; summarizedTurns: number; contextTokens: number; summary: string }
   | { type: EventType.AgentHandoff; workflowId: string; from: string; to: string; reason: string }
   | { type: EventType.PlanCreated; workflowId: string; steps: { id: string; agent: string; objective: string }[] }
@@ -83,8 +94,6 @@ export type AgentEvent = EventInput & { id: string; ts: number };
 export type Emit = (event: EventInput) => void;
 
 // Messages the browser sends back to the server (over the same socket).
-export type ClientMessage = {
-  type: "submit_task";
-  input: string;
-  sessionId: string;
-};
+export type ClientMessage =
+  | { type: "submit_task"; input: string; sessionId: string }
+  | { type: "request_application"; jobId: string; sessionId: string };

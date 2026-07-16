@@ -8,6 +8,8 @@ import { WebSocketServer, type WebSocket } from "ws";
 import { ensureSchema, clearCandidateProfile, clearEventLog } from "../harness/db";
 import { subscribe, history } from "../harness/bus";
 import { runAgentWorkflow } from "../harness/runtime";
+import { runApplicationWorkflow } from "../harness/applications";
+import { findJob } from "../harness/jobs";
 import type { ClientMessage } from "@shared/events";
 
 const PORT = Number(process.env.PORT ?? 8787);
@@ -76,6 +78,12 @@ async function main() {
           message: message.input,
           sessionId: message.sessionId,
         });
+      }
+      if (message.type === "request_application") {
+        if (!message.sessionId.trim()) return;
+        const job = findJob(message.jobId);
+        if (!job) return;
+        await DBOS.startWorkflow(runApplicationWorkflow)({ sessionId: message.sessionId, job });
       }
     });
 

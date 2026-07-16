@@ -13,6 +13,10 @@ export const JOB_POSTS: JobPost[] = [
   { id: "job_010", title: "Junior Software Engineer", company: "Juniper Works", requiredSkills: ["javascript", "git", "problem solving"], preferredSkills: ["react", "node.js"], minimumExperienceYears: 0, workStyle: "On-site", description: "Learn in a supportive team while delivering product improvements." },
 ];
 
+export function findJob(jobId: string): JobPost | undefined {
+  return JOB_POSTS.find((job) => job.id === jobId);
+}
+
 function normalizeSkill(skill: string): string {
   return skill.trim().toLowerCase();
 }
