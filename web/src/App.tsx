@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Moon, Sun } from "lucide-react";
+import { LogOut, Moon, Sun } from "lucide-react";
 import { EventType, type AgentEvent, type ApplicationStatusEvent, type JobMatch } from "@shared/events";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
@@ -9,23 +9,37 @@ import { useTheme } from "./useTheme";
 import { TaskPane } from "./components/TaskPane";
 import { InspectorPane } from "./components/InspectorPane";
 import { JobDetailsPane } from "./components/JobDetailsPane";
+import { AuthScreen } from "./components/AuthScreen";
+import { authClient } from "./auth-client";
 
 export function App() {
-  const { events, connected, error, send, sessionId } = useHarnessSocket();
+  const { data: session, isPending } = authClient.useSession();
+
+  if (isPending) {
+    return <main className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">Loading account...</main>;
+  }
+  if (!session) return <AuthScreen />;
+
+  return <AuthenticatedApp userId={session.user.id} email={session.user.email} />;
+}
+
+function AuthenticatedApp({ userId, email }: { userId: string; email: string }) {
+  const { events, connected, error, send } = useHarnessSocket();
   const { theme, toggle } = useTheme();
   const [selectedJob, setSelectedJob] = useState<JobMatch | null>(null);
   const selectedApplication = selectedJob
-    ? latestApplication(events, sessionId, selectedJob.id)
+    ? latestApplication(events, userId, selectedJob.id)
     : null;
 
   function requestApplication(job: JobMatch) {
-    send({ type: "request_application", jobId: job.id, sessionId });
+    send({ type: "request_application", jobId: job.id });
   }
 
   async function decideApplication(workflowId: string, approved: boolean) {
     await fetch(`http://${location.hostname}:8787/api/approve/${workflowId}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ approved }),
     });
   }
@@ -61,6 +75,19 @@ export function App() {
             >
               {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
             </Button>
+            <span className="hidden max-w-48 truncate text-xs text-muted-foreground sm:block" title={email}>
+              {email}
+            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8"
+              onClick={() => void authClient.signOut()}
+              aria-label="Sign out"
+              title="Sign out"
+            >
+              <LogOut className="size-4" />
+            </Button>
           </div>
         </header>
         <main className="grid min-h-0 flex-1 grid-cols-2">
@@ -69,7 +96,6 @@ export function App() {
             connected={connected}
             error={error}
             send={send}
-            sessionId={sessionId}
             onJobSelect={setSelectedJob}
           />
           {/* do not delete */}
@@ -88,14 +114,14 @@ export function App() {
 
 function latestApplication(
   events: AgentEvent[],
-  sessionId: string,
+  userId: string,
   jobId: string,
 ): ApplicationStatusEvent | null {
   for (let index = events.length - 1; index >= 0; index--) {
     const event = events[index];
     if (
       event.type === EventType.ApplicationStatus &&
-      event.sessionId === sessionId &&
+      event.userId === userId &&
       event.jobId === jobId
     ) {
       return event;

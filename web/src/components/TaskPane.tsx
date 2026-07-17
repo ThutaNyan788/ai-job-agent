@@ -51,14 +51,7 @@ type Turn =
   | { id: string; role: "handoff"; from: string; to: string; reason: string }
   | { id: string; role: "supervision"; subagents: Subagent[] }
   | { id: string; role: "jobMatches"; jobs: JobMatch[] }
-  | {
-      id: string;
-      role: "approval";
-      workflowId: string;
-      action: string;
-      args: unknown;
-      state: "pending" | "approved" | "rejected";
-    }
+  | { id: string; role: "approval"; state: "pending" | "approved" | "rejected" }
   | { id: string; role: "log"; level: string; text: string };
 
 function toTranscript(events: AgentEvent[]): { turns: Turn[]; running: boolean } {
@@ -176,9 +169,6 @@ function toTranscript(events: AgentEvent[]): { turns: Turn[]; running: boolean }
         const turn: Extract<Turn, { role: "approval" }> = {
           id: ev.id,
           role: "approval",
-          workflowId: ev.workflowId,
-          action: ev.action,
-          args: ev.args,
           state: "pending",
         };
         approvalsById.set(ev.toolCallId, turn);
@@ -204,14 +194,12 @@ export function TaskPane({
   connected,
   error,
   send,
-  sessionId,
   onJobSelect,
 }: {
   events: AgentEvent[];
   connected: boolean;
   error: string | null;
   send: (message: ClientMessage) => boolean;
-  sessionId: string;
   onJobSelect: (job: JobMatch) => void;
 }) {
   const [input, setInput] = useState("");
@@ -223,15 +211,15 @@ export function TaskPane({
     const sent = send({
       type: "submit_task",
       input: text,
-      sessionId,
     });
     if (sent) setInput("");
   }
 
   async function clearMemory() {
     // The route is wired up in the memory lesson; degrade gracefully before then.
-    await fetch(`http://${location.hostname}:8787/api/clear?sessionId=${encodeURIComponent(sessionId)}`, {
+    await fetch(`http://${location.hostname}:8787/api/clear`, {
       method: "POST",
+      credentials: "include",
     }).catch(() => {});
     location.reload(); // simplest reset: reconnect and replay the now-empty log
   }
@@ -302,46 +290,18 @@ export function TaskPane({
 const PROSE = "prose prose-sm dark:prose-invert max-w-none";
 
 function ApprovalCard({ turn }: { turn: Extract<Turn, { role: "approval" }> }) {
-  function decide(approved: boolean) {
-    fetch(`http://${location.hostname}:8787/api/approve/${turn.workflowId}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ approved }),
-    }).catch(() => {});
-  }
-
-  const args = turn.args as Record<string, unknown> | null;
-  const summary =
-    turn.action === "issueRefund" && args
-      ? `Refund $${((Number(args.amountCents) || 0) / 100).toFixed(2)} to ${String(args.customerId)} (charge ${String(args.chargeId)})`
-      : JSON.stringify(turn.args);
-
   return (
     <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3">
       <div className="mb-1.5 flex items-center gap-2 text-sm font-medium">
-        <ShieldAlert className="size-4 text-amber-500" /> Approval required
-        <span className="text-muted-foreground font-mono text-xs">{turn.action}</span>
+        <ShieldAlert className="size-4 text-amber-500" /> Application review requested
       </div>
-      <p className="text-muted-foreground mb-3 text-sm">{summary}</p>
-      {turn.state === "pending" ? (
-        <div className="flex gap-2">
-          <Button size="sm" onClick={() => decide(true)}>
-            Approve
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => decide(false)}>
-            Reject
-          </Button>
-        </div>
-      ) : (
-        <div
-          className={cn(
-            "text-sm font-medium",
-            turn.state === "approved" ? "text-emerald-600" : "text-destructive",
-          )}
-        >
-          {turn.state === "approved" ? "✓ Approved" : "✗ Rejected"}
-        </div>
-      )}
+      <p className="text-muted-foreground text-sm">
+        {turn.state === "pending"
+          ? "Review and decide from the selected job in the details pane."
+          : turn.state === "approved"
+            ? "Application approved."
+            : "Application cancelled."}
+      </p>
     </div>
   );
 }
@@ -466,7 +426,7 @@ function JobMatchCards({
             <div className="min-w-0">
               <h3 className="font-medium">{job.title}</h3>
               <p className="text-muted-foreground text-xs">
-                {job.company} · {job.workStyle} · {job.minimumExperienceYears}+ years
+                {job.company.name} · {job.location.workType} · {job.yearsOfExperience.min}+ years
               </p>
             </div>
             <span className="shrink-0 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">

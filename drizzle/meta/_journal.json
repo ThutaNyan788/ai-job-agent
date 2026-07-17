@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1784304000000,
+      "tag": "0000_better_auth_and_user_ownership",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1784305000000,
+      "tag": "0001_candidate_interview_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784306000000,
+      "tag": "0002_job_posts",
+      "breakpoints": true
+    }
+  ]
+}

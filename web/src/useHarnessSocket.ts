@@ -1,25 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentEvent, ClientMessage } from "@shared/events";
+import { AUTH_BASE_URL } from "./auth-client";
 
 // The inspector's single source of truth: the harness event stream, received
 // over one WebSocket. We also send commands (submit_task, ...) back over it.
-const WS_URL = `ws://${location.hostname}:8787/ws`;
-const SESSION_STORAGE_KEY = "harness-job-session-id";
-
-function getSessionId(): string {
-  const existing = localStorage.getItem(SESSION_STORAGE_KEY);
-  if (existing) return existing;
-  const sessionId = crypto.randomUUID();
-  localStorage.setItem(SESSION_STORAGE_KEY, sessionId);
-  return sessionId;
-}
+const WS_URL = `${AUTH_BASE_URL.replace(/^http/, "ws")}/ws`;
 
 export function useHarnessSocket() {
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
-  const sessionIdRef = useRef(getSessionId());
 
   useEffect(() => {
     const socket = new WebSocket(WS_URL);
@@ -58,5 +49,5 @@ export function useHarnessSocket() {
     return true;
   }, []);
 
-  return { events, connected, error, send, sessionId: sessionIdRef.current };
+  return { events, connected, error, send };
 }

@@ -2,7 +2,7 @@ import { DBOS } from "@dbos-inc/dbos-sdk";
 import { streamText } from "ai";
 import type { JSONValue, ModelMessage } from "ai";
 import { EventType, type JobMatch } from "@shared/events";
-import { emit } from "./bus";
+import { emit, emitTransient } from "./bus";
 import { jobSeekerAgent } from "./agents";
 import { model } from "./model";
 import { getCandidateProfile, runTool } from "./tools";
@@ -18,16 +18,17 @@ const MAX_STEPS = 12;
 
 type ToolCall = { toolCallId: string; toolName: string; input: Record<string, unknown> };
 type Turn = { text: string; toolCalls: ToolCall[]; responseMessages: ModelMessage[] };
-export type JobWorkflowInput = { message: string; sessionId: string };
+export type JobWorkflowInput = { message: string; userId: string };
 
 async function modelTurn(
   workflowId: string,
+  userId: string,
   context: ModelMessage[],
 ): Promise<Turn> {
   const result = streamText({ model, messages: context, tools: jobSeekerAgent.tools });
   for await (const part of result.fullStream) {
     if (part.type === "text-delta") {
-      await emit({ type: EventType.ModelDelta, workflowId, text: part.text });
+      emitTransient({ type: EventType.ModelDelta, workflowId, text: part.text }, userId);
     }
   }
   const rawCalls = await result.toolCalls;
@@ -44,7 +45,7 @@ async function modelTurn(
 
 async function toolStep(
   workflowId: string,
-  sessionId: string,
+  userId: string,
   call: ToolCall,
 ): Promise<Record<string, unknown>> {
   await emit({
@@ -53,16 +54,16 @@ async function toolStep(
     toolCallId: call.toolCallId,
     name: call.toolName,
     args: call.input,
-  });
-  const output = await runTool(call.toolName, call.input, { sessionId });
+  }, userId);
+  const output = await runTool(call.toolName, call.input, { userId });
   await emit({
     type: EventType.ToolCompleted,
     workflowId,
     toolCallId: call.toolCallId,
     result: output,
-  });
+  }, userId);
   if (call.toolName === "searchJobs") {
-    await emit({ type: EventType.JobMatches, workflowId, jobs: output.matches as JobMatch[] });
+    await emit({ type: EventType.JobMatches, workflowId, jobs: output.matches as JobMatch[] }, userId);
   }
   return output;
 }
@@ -79,11 +80,11 @@ function toolResultMessage(call: ToolCall, value: JSONValue): ModelMessage {
 async function agentWorkflow(input: JobWorkflowInput): Promise<string> {
   const workflowId = DBOS.workflowID ?? "unknown";
   await DBOS.runStep(
-    () => emit({ type: EventType.WorkflowStarted, workflowId, input: input.message }),
+    () => emit({ type: EventType.WorkflowStarted, workflowId, input: input.message }, input.userId),
     { name: "started" },
   );
 
-  let profile = await DBOS.runStep(() => getCandidateProfile(input.sessionId), { name: "load-profile" });
+  let profile = await DBOS.runStep(() => getCandidateProfile(input.userId), { name: "load-profile" });
   const turns: ModelMessage[][] = [];
   let summary = "";
 
@@ -103,28 +104,28 @@ async function agentWorkflow(input: JobWorkflowInput): Promise<string> {
             summarizedTurns: old.length,
             contextTokens: estimateTokens(buildContext(jobSeekerAgent.systemPrompt(profile), input.message, summary, turns)),
             summary,
-          }),
+          }, input.userId),
           { name: `compacted-${step}` },
         );
       }
     }
 
     const context = buildContext(jobSeekerAgent.systemPrompt(profile), input.message, summary, turns);
-    const turn = await DBOS.runStep(() => modelTurn(workflowId, context), { name: `model-${step}` });
+    const turn = await DBOS.runStep(() => modelTurn(workflowId, input.userId, context), { name: `model-${step}` });
     const turnMessages: ModelMessage[] = [...turn.responseMessages];
 
     if (turn.toolCalls.length === 0) {
-      await DBOS.runStep(() => emit({ type: EventType.ModelCompleted, workflowId, text: turn.text }), {
+      await DBOS.runStep(() => emit({ type: EventType.ModelCompleted, workflowId, text: turn.text }, input.userId), {
         name: `model-done-${step}`,
       });
-      await DBOS.runStep(() => emit({ type: EventType.WorkflowCompleted, workflowId, output: turn.text }), {
+      await DBOS.runStep(() => emit({ type: EventType.WorkflowCompleted, workflowId, output: turn.text }, input.userId), {
         name: "completed",
       });
       return turn.text;
     }
 
     for (const call of turn.toolCalls) {
-      const output = await DBOS.runStep(() => toolStep(workflowId, input.sessionId, call), {
+      const output = await DBOS.runStep(() => toolStep(workflowId, input.userId, call), {
         name: `tool-${call.toolCallId}`,
       });
       if (call.toolName === "saveCandidateProfile" && output.profile) {
@@ -136,7 +137,7 @@ async function agentWorkflow(input: JobWorkflowInput): Promise<string> {
   }
 
   await DBOS.runStep(
-    () => emit({ type: EventType.WorkflowFailed, workflowId, error: `Hit the ${MAX_STEPS}-step limit without finishing.` }),
+    () => emit({ type: EventType.WorkflowFailed, workflowId, error: `Hit the ${MAX_STEPS}-step limit without finishing.` }, input.userId),
     { name: "failed" },
   );
   return "";

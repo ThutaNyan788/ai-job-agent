@@ -8,3 +8,11 @@
 
 OPENAI_API_KEY=sk-...
 DATABASE_URL=postgresql://user:password@host/db?sslmode=require
+
+# Authentication. Generate a high-entropy BETTER_AUTH_SECRET, then configure
+# Google with http://localhost:8787/api/auth/callback/google for local use.
+APP_ORIGIN=http://localhost:5173
+BETTER_AUTH_URL=http://localhost:8787
+BETTER_AUTH_SECRET=replace-with-a-long-random-secret
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=

@@ -1,7 +1,8 @@
 // The contract between the harness (server) and the inspector (browser).
 //
-// EVERYTHING the harness does becomes an event on this stream. That is the
-// whole idea of the course: the event log IS the system. The UI never talks to
+// EVERYTHING the harness does becomes an event on this stream. Durable events
+// are stored in the event log; high-frequency model deltas are live-only.
+// The UI never talks to
 // the model or the tools directly — it only ever renders this stream.
 //
 // Every event type is a constant on `EventType`. Import it and use
@@ -14,7 +15,7 @@ export enum EventType {
   WorkflowStarted = "workflow.started",
   WorkflowCompleted = "workflow.completed",
   WorkflowFailed = "workflow.failed",
-  // the model thinking out loud (streamed token by token)
+  // live-only streamed text; model.completed is the durable final response
   ModelDelta = "model.delta",
   ModelCompleted = "model.completed",
   // a tool call and its outcome
@@ -40,15 +41,42 @@ export enum EventType {
   Log = "log",
 }
 
+export type JobSkill = {
+  name: string;
+  level: "beginner" | "intermediate" | "advanced";
+};
+
 export type JobPost = {
   id: string;
+  company: {
+    name: string;
+    website: string;
+  };
   title: string;
-  company: string;
-  requiredSkills: string[];
-  preferredSkills: string[];
-  minimumExperienceYears: number;
-  workStyle: "Remote" | "Hybrid" | "On-site";
   description: string;
+  location: {
+    country: string;
+    city: string;
+    workType: "remote" | "onsite" | "hybrid";
+  };
+  employmentType: "full_time" | "part_time" | "contract" | "internship";
+  experienceLevel: "junior" | "mid" | "senior" | "lead";
+  yearsOfExperience: {
+    min: number;
+    max: number;
+  };
+  salary: {
+    min: number;
+    max: number;
+    currency: string;
+  };
+  requiredSkills: JobSkill[];
+  responsibilities: string[];
+  requirements: string[];
+  niceToHave: string[];
+  benefits: string[];
+  postedAt: string;
+  status: "active" | "closed";
 };
 
 export type JobMatch = JobPost & {
@@ -61,7 +89,7 @@ export type ApplicationStatus = "pending" | "submitted" | "cancelled";
 export type ApplicationStatusEvent = {
   type: EventType.ApplicationStatus;
   workflowId: string;
-  sessionId: string;
+  userId: string;
   jobId: string;
   status: ApplicationStatus;
 };
@@ -88,12 +116,12 @@ export type EventInput =
   | { type: EventType.Log; workflowId?: string; level: "info" | "warn" | "error"; message: string };
 
 // The harness stamps every event with an id + timestamp when it emits.
-export type AgentEvent = EventInput & { id: string; ts: number };
+export type AgentEvent = EventInput & { id: string; ts: number; userId?: string };
 
 // What harness code calls to push an event onto the stream.
 export type Emit = (event: EventInput) => void;
 
 // Messages the browser sends back to the server (over the same socket).
 export type ClientMessage =
-  | { type: "submit_task"; input: string; sessionId: string }
-  | { type: "request_application"; jobId: string; sessionId: string };
+  | { type: "submit_task"; input: string }
+  | { type: "request_application"; jobId: string };

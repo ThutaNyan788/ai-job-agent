@@ -36,7 +36,7 @@ export function JobDetailsPane({
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-xl font-semibold">{job.title}</h1>
-            <p className="text-muted-foreground mt-1 text-sm">{job.company}</p>
+            <p className="text-muted-foreground mt-1 text-sm">{job.company.name}</p>
           </div>
           <span className="shrink-0 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-400">
             {job.score}% match
@@ -47,17 +47,21 @@ export function JobDetailsPane({
           <div className="flex items-center gap-2">
             <BriefcaseBusiness className="text-muted-foreground size-4" />
             <dt className="sr-only">Company</dt>
-            <dd>{job.company}</dd>
+            <dd>
+              <a className="text-primary underline-offset-4 hover:underline" href={job.company.website} target="_blank" rel="noreferrer">
+                {job.company.name}
+              </a>
+            </dd>
           </div>
           <div className="flex items-center gap-2">
             <MapPin className="text-muted-foreground size-4" />
             <dt className="sr-only">Work style</dt>
-            <dd>{job.workStyle}</dd>
+            <dd>{job.location.workType}</dd>
           </div>
           <div className="flex items-center gap-2">
             <Clock3 className="text-muted-foreground size-4" />
             <dt className="sr-only">Experience</dt>
-            <dd>{job.minimumExperienceYears}+ years of experience</dd>
+            <dd>{job.yearsOfExperience.min}+ years of experience</dd>
           </div>
         </dl>
 
@@ -74,8 +78,12 @@ export function JobDetailsPane({
           </div>
         </section>
 
-        <SkillSection title="Required skills" skills={job.requiredSkills} matchedSkills={job.matchedSkills} />
-        <SkillSection title="Preferred skills" skills={job.preferredSkills} matchedSkills={job.matchedSkills} />
+        <SkillSection
+          title="Required skills"
+          skills={job.requiredSkills.map((skill) => skill.name)}
+          matchedSkills={job.matchedSkills}
+        />
+        <SkillSection title="Nice to have" skills={job.niceToHave} matchedSkills={job.matchedSkills} />
 
         <ApplicationAction
           job={job}

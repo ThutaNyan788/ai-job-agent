@@ -8,27 +8,27 @@ import { needsApplicationApproval } from "./application-state";
 const APPROVAL_TIMEOUT_S = 86_400;
 
 export type ApplicationWorkflowInput = {
-  sessionId: string;
+  userId: string;
   job: JobPost;
 };
 
 async function emitStatus(
   workflowId: string,
-  sessionId: string,
+  userId: string,
   jobId: string,
   status: ApplicationStatus,
 ): Promise<void> {
-  await emit({ type: EventType.ApplicationStatus, workflowId, sessionId, jobId, status });
+  await emit({ type: EventType.ApplicationStatus, workflowId, userId, jobId, status }, userId);
 }
 
 async function applicationWorkflow(input: ApplicationWorkflowInput): Promise<ApplicationStatus> {
   const workflowId = DBOS.workflowID ?? "unknown";
   const application = await DBOS.runStep(
-    () => ensureApplication(input.sessionId, input.job.id, workflowId),
+    () => ensureApplication(input.userId, input.job.id, workflowId),
     { name: "ensure-application" },
   );
   await DBOS.runStep(
-    () => emitStatus(application.workflowId, input.sessionId, input.job.id, application.status),
+    () => emitStatus(application.workflowId, input.userId, input.job.id, application.status),
     { name: "application-pending" },
   );
 
@@ -41,15 +41,15 @@ async function applicationWorkflow(input: ApplicationWorkflowInput): Promise<App
       workflowId,
       toolCallId,
       action: "submitApplication",
-      args: { jobId: input.job.id, title: input.job.title, company: input.job.company },
-    }),
+      args: { jobId: input.job.id, title: input.job.title, company: input.job.company.name },
+    }, input.userId),
     { name: "approval-requested" },
   );
 
   const decision = await DBOS.recv<{ approved: boolean }>("approval", APPROVAL_TIMEOUT_S);
   const approved = decision?.approved ?? false;
   await DBOS.runStep(
-    () => emit({ type: EventType.ApprovalResolved, workflowId, toolCallId, approved }),
+    () => emit({ type: EventType.ApprovalResolved, workflowId, toolCallId, approved }, input.userId),
     { name: "approval-resolved" },
   );
 
@@ -57,11 +57,11 @@ async function applicationWorkflow(input: ApplicationWorkflowInput): Promise<App
     ? "submitted"
     : "cancelled";
   const resolved = await DBOS.runStep(
-    () => resolveApplication(input.sessionId, input.job.id, workflowId, status),
+    () => resolveApplication(input.userId, input.job.id, workflowId, status),
     { name: "resolve-application" },
   );
   await DBOS.runStep(
-    () => emitStatus(workflowId, input.sessionId, input.job.id, resolved.status),
+    () => emitStatus(workflowId, input.userId, input.job.id, resolved.status),
     { name: "application-resolved" },
   );
   return resolved.status;

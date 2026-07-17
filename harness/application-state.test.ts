@@ -3,7 +3,7 @@ import test from "node:test";
 import { needsApplicationApproval } from "./application-state";
 
 const pendingApplication = {
-  sessionId: "session-1",
+  userId: "user-1",
   jobId: "job_001",
   workflowId: "workflow-1",
   status: "pending" as const,

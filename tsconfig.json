@@ -18,5 +18,5 @@
       "@shared/*": ["shared/*"]
     }
   },
-  "include": ["server", "shared", "harness", "examples", "web"]
+  "include": ["server", "shared", "harness", "scripts", "examples", "web"]
 }
