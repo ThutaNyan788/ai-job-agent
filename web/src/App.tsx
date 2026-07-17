@@ -9,16 +9,24 @@ import { useTheme } from "./useTheme";
 import { TaskPane } from "./components/TaskPane";
 import { InspectorPane } from "./components/InspectorPane";
 import { JobDetailsPane } from "./components/JobDetailsPane";
-import { AuthScreen } from "./components/AuthScreen";
+import { LandingPage } from "./components/LandingPage";
+import { LoginPage } from "./components/LoginPage";
+import { RegisterPage } from "./components/RegisterPage";
 import { authClient } from "./auth-client";
+import { navigate, usePathname } from "./navigation";
 
 export function App() {
   const { data: session, isPending } = authClient.useSession();
+  const pathname = usePathname();
 
   if (isPending) {
-    return <main className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">Loading account...</main>;
+    return <main className="flex min-h-screen items-center justify-center bg-white text-sm text-slate-500">Loading TalentAI...</main>;
   }
-  if (!session) return <AuthScreen />;
+  if (!session) {
+    if (pathname === "/login") return <LoginPage />;
+    if (pathname === "/register") return <RegisterPage />;
+    return <LandingPage />;
+  }
 
   return <AuthenticatedApp userId={session.user.id} email={session.user.email} />;
 }
@@ -49,7 +57,7 @@ function AuthenticatedApp({ userId, email }: { userId: string; email: string }) 
       <div className="flex h-full flex-col">
         <header className="flex items-center justify-between border-b px-4 py-2">
           <span className="text-sm font-semibold tracking-tight">
-            Job<span className="text-muted-foreground"> Match Harness</span>
+            Talent<span className="text-pink-600">AI</span>
           </span>
           <div className="flex items-center gap-3">
             <span
@@ -82,7 +90,10 @@ function AuthenticatedApp({ userId, email }: { userId: string; email: string }) 
               variant="ghost"
               size="icon"
               className="size-8"
-              onClick={() => void authClient.signOut()}
+              onClick={async () => {
+                await authClient.signOut();
+                navigate("/");
+              }}
               aria-label="Sign out"
               title="Sign out"
             >
