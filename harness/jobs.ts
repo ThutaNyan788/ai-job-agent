@@ -41,6 +41,15 @@ export async function findJob(jobId: string): Promise<JobPost | undefined> {
   return rows[0]?.data;
 }
 
+export async function listJobs(): Promise<JobPost[]> {
+  const { db, jobPosts } = await import("./db");
+  const rows = await db.select({ data: jobPosts.data }).from(jobPosts);
+  return rows
+    .map((row) => row.data)
+    .filter((job) => job.status === "active")
+    .sort((a, b) => Date.parse(b.postedAt) - Date.parse(a.postedAt));
+}
+
 export async function searchJobs(skills: string[], experienceYears: number): Promise<JobMatch[]> {
   const { db, jobPosts } = await import("./db");
   const rows = await db.select({ data: jobPosts.data }).from(jobPosts);

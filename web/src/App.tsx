@@ -12,6 +12,8 @@ import { JobDetailsPane } from "./components/JobDetailsPane";
 import { LandingPage } from "./components/LandingPage";
 import { LoginPage } from "./components/LoginPage";
 import { RegisterPage } from "./components/RegisterPage";
+import { JobListPage } from "./components/JobListPage";
+import { JobDetailsPage } from "./components/JobDetailsPage";
 import { authClient } from "./auth-client";
 import { navigate, usePathname } from "./navigation";
 
@@ -28,10 +30,10 @@ export function App() {
     return <LandingPage />;
   }
 
-  return <AuthenticatedApp userId={session.user.id} email={session.user.email} />;
+  return <AuthenticatedApp userId={session.user.id} email={session.user.email} pathname={pathname} />;
 }
 
-function AuthenticatedApp({ userId, email }: { userId: string; email: string }) {
+function AuthenticatedApp({ userId, email, pathname }: { userId: string; email: string; pathname: string }) {
   const { events, connected, error, send } = useHarnessSocket();
   const { theme, toggle } = useTheme();
   const [selectedJob, setSelectedJob] = useState<JobMatch | null>(null);
@@ -43,6 +45,10 @@ function AuthenticatedApp({ userId, email }: { userId: string; email: string }) 
     send({ type: "request_application", jobId: job.id });
   }
 
+  function requestApplicationById(jobId: string) {
+    send({ type: "request_application", jobId });
+  }
+
   async function decideApplication(workflowId: string, approved: boolean) {
     await fetch(`http://${location.hostname}:8787/api/approve/${workflowId}`, {
       method: "POST",
@@ -50,6 +56,23 @@ function AuthenticatedApp({ userId, email }: { userId: string; email: string }) 
       credentials: "include",
       body: JSON.stringify({ approved }),
     });
+  }
+
+  const jobDetailsMatch = pathname.match(/^\/jobs\/([^/]+)$/);
+  if (jobDetailsMatch) {
+    const jobId = decodeURIComponent(jobDetailsMatch[1]);
+    return (
+      <JobDetailsPage
+        jobId={jobId}
+        application={latestApplication(events, userId, jobId)}
+        connected={connected}
+        onRequestApplication={requestApplicationById}
+        onDecideApplication={decideApplication}
+      />
+    );
+  }
+  if (pathname === "/" || pathname === "/jobs") {
+    return <JobListPage email={email} />;
   }
 
   return (

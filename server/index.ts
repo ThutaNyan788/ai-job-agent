@@ -17,7 +17,7 @@ import {
 import { subscribe, history } from "../harness/bus";
 import { runAgentWorkflow } from "../harness/runtime";
 import { runApplicationWorkflow } from "../harness/applications";
-import { findJob } from "../harness/jobs";
+import { findJob, listJobs } from "../harness/jobs";
 import type { ClientMessage } from "@shared/events";
 
 const PORT = Number(process.env.PORT ?? 8787);
@@ -54,6 +54,43 @@ async function main() {
   app.use(express.json());
   app.get("/health", (_req, res) => res.json({ ok: true }));
   app.get("/", (_req, res) => res.redirect(APP_ORIGIN));
+
+  app.get("/api/jobs", async (req, res) => {
+    const user = await authenticatedUser(req.headers);
+    if (!user) return res.sendStatus(401);
+
+    const query = typeof req.query.q === "string" ? req.query.q.trim().toLowerCase() : "";
+    const location = typeof req.query.location === "string"
+      ? req.query.location.trim().toLowerCase()
+      : "";
+    const experience = typeof req.query.experience === "string" ? req.query.experience : "";
+    const workType = typeof req.query.workType === "string" ? req.query.workType : "";
+    const jobs = (await listJobs()).filter((job) => {
+      const searchable = [
+        job.title,
+        job.company.name,
+        job.description,
+        ...job.requiredSkills.map((skill) => skill.name),
+        ...job.niceToHave,
+      ].join(" ").toLowerCase();
+      const jobLocation = `${job.location.city} ${job.location.country}`.toLowerCase();
+      return (
+        (!query || searchable.includes(query)) &&
+        (!location || jobLocation.includes(location)) &&
+        (!experience || job.experienceLevel === experience) &&
+        (!workType || job.location.workType === workType)
+      );
+    });
+    res.json({ jobs });
+  });
+
+  app.get("/api/jobs/:jobId", async (req, res) => {
+    const user = await authenticatedUser(req.headers);
+    if (!user) return res.sendStatus(401);
+    const job = await findJob(req.params.jobId);
+    if (!job || job.status !== "active") return res.sendStatus(404);
+    res.json({ job });
+  });
 
   // Clear the durable log. The inspector calls this, then reloads.
   app.post("/api/clear", async (req, res) => {
