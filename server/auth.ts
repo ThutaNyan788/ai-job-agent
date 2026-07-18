@@ -1,5 +1,6 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { z } from "zod";
 import { db } from "../harness/db";
 import * as schema from "../harness/auth-schema";
 
@@ -38,6 +39,20 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: false,
+  },
+  user: {
+    additionalFields: {
+      role: {
+        type: "string",
+        required: false,
+        defaultValue: "user",
+        input: true,
+        validator: {
+          input: z.enum(["user", "company"]),
+          output: z.enum(["user", "company"]),
+        },
+      },
+    },
   },
   socialProviders: google,
 });

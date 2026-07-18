@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { bigserial, jsonb, pgTable, primaryKey, real, text } from "drizzle-orm/pg-core";
+import { bigserial, index, jsonb, pgTable, primaryKey, real, text } from "drizzle-orm/pg-core";
 import type { AgentEvent, ApplicationStatus, JobPost } from "@shared/events";
 
 const connectionString = process.env.DATABASE_URL;
@@ -20,10 +20,15 @@ export const eventLog = pgTable("event_log", {
   data: jsonb("data").$type<AgentEvent>().notNull(),
 });
 
-export const jobPosts = pgTable("job_posts", {
-  id: text("id").primaryKey(),
-  data: jsonb("data").$type<JobPost>().notNull(),
-});
+export const jobPosts = pgTable(
+  "job_posts",
+  {
+    id: text("id").primaryKey(),
+    ownerUserId: text("owner_user_id"),
+    data: jsonb("data").$type<JobPost>().notNull(),
+  },
+  (table) => [index("job_posts_owner_user_id_idx").on(table.ownerUserId)],
+);
 
 export type CandidateProfile = {
   position: string | null;

@@ -1,10 +1,13 @@
 import { boolean, index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 
+export type UserRole = "user" | "company";
+
 // Generated from Better Auth's core schema, kept separate from job-domain tables.
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
+  role: text("role").$type<UserRole>().default("user").notNull(),
   emailVerified: boolean("email_verified").notNull(),
   image: text("image"),
   createdAt: timestamp("created_at").notNull(),

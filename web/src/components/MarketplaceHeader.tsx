@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { BriefcaseBusiness, LogOut, Menu, MessageSquareText, X } from "lucide-react";
+import { BriefcaseBusiness, CirclePlus, LayoutDashboard, LogOut, Menu, MessageSquareText, X } from "lucide-react";
 import { authClient } from "@/auth-client";
 import { handleInternalLink, navigate } from "@/navigation";
 
-export function MarketplaceHeader({ email }: { email: string }) {
+export function MarketplaceHeader({ email, role = "user" }: { email: string; role?: "user" | "company" }) {
   const [open, setOpen] = useState(false);
 
   async function signOut() {
@@ -23,9 +23,16 @@ export function MarketplaceHeader({ email }: { email: string }) {
 
         <div className="hidden items-center gap-7 md:flex">
           <a href="/jobs" onClick={handleInternalLink} className="text-sm font-semibold text-slate-700 hover:text-pink-600">Explore jobs</a>
-          <a href="/ai-assistant" onClick={handleInternalLink} className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 hover:text-pink-600">
-            <MessageSquareText className="size-4" /> AI assistant
-          </a>
+          {role === "company" ? (
+            <>
+              <a href="/company/jobs" onClick={handleInternalLink} className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 hover:text-pink-600"><LayoutDashboard className="size-4" /> My job posts</a>
+              <a href="/company/jobs/new" onClick={handleInternalLink} className="inline-flex items-center gap-2 rounded-xl bg-pink-600 px-3 py-2 text-sm font-bold text-white hover:bg-pink-700"><CirclePlus className="size-4" /> Create job</a>
+            </>
+          ) : (
+            <a href="/ai-assistant" onClick={handleInternalLink} className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 hover:text-pink-600">
+              <MessageSquareText className="size-4" /> AI assistant
+            </a>
+          )}
           <span className="max-w-44 truncate text-xs text-slate-400" title={email}>{email}</span>
           <button type="button" onClick={() => void signOut()} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">
             <LogOut className="size-4" /> Sign out
@@ -41,7 +48,14 @@ export function MarketplaceHeader({ email }: { email: string }) {
         <div className="border-t border-slate-100 bg-white px-4 py-4 md:hidden">
           <div className="mx-auto grid max-w-7xl gap-2">
             <a href="/jobs" onClick={handleInternalLink} className="rounded-xl px-3 py-2.5 text-sm font-semibold hover:bg-pink-50">Explore jobs</a>
-            <a href="/ai-assistant" onClick={handleInternalLink} className="rounded-xl px-3 py-2.5 text-sm font-semibold hover:bg-pink-50">AI assistant</a>
+            {role === "company" ? (
+              <>
+                <a href="/company/jobs" onClick={handleInternalLink} className="rounded-xl px-3 py-2.5 text-sm font-semibold hover:bg-pink-50">My job posts</a>
+                <a href="/company/jobs/new" onClick={handleInternalLink} className="rounded-xl bg-pink-600 px-3 py-2.5 text-center text-sm font-semibold text-white">Create job</a>
+              </>
+            ) : (
+              <a href="/ai-assistant" onClick={handleInternalLink} className="rounded-xl px-3 py-2.5 text-sm font-semibold hover:bg-pink-50">AI assistant</a>
+            )}
             <button type="button" onClick={() => void signOut()} className="mt-2 inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-semibold">
               <LogOut className="size-4" /> Sign out
             </button>

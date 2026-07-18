@@ -14,6 +14,8 @@ import { LoginPage } from "./components/LoginPage";
 import { RegisterPage } from "./components/RegisterPage";
 import { JobListPage } from "./components/JobListPage";
 import { JobDetailsPage } from "./components/JobDetailsPage";
+import { CompanyJobsPage } from "./components/CompanyJobsPage";
+import { JobPostingForm } from "./components/JobPostingForm";
 import { authClient } from "./auth-client";
 import { navigate, usePathname } from "./navigation";
 
@@ -30,10 +32,11 @@ export function App() {
     return <LandingPage />;
   }
 
-  return <AuthenticatedApp userId={session.user.id} email={session.user.email} pathname={pathname} />;
+  const role = ((session.user as typeof session.user & { role?: "user" | "company" }).role ?? "user");
+  return <AuthenticatedApp userId={session.user.id} email={session.user.email} role={role} pathname={pathname} />;
 }
 
-function AuthenticatedApp({ userId, email, pathname }: { userId: string; email: string; pathname: string }) {
+function AuthenticatedApp({ userId, email, role, pathname }: { userId: string; email: string; role: "user" | "company"; pathname: string }) {
   const { events, connected, error, send } = useHarnessSocket();
   const { theme, toggle } = useTheme();
   const [selectedJob, setSelectedJob] = useState<JobMatch | null>(null);
@@ -71,8 +74,17 @@ function AuthenticatedApp({ userId, email, pathname }: { userId: string; email: 
       />
     );
   }
+  if (pathname === "/company/jobs/new") {
+    return role === "company" ? <JobPostingForm email={email} /> : <JobListPage email={email} role={role} />;
+  }
+  if (pathname === "/company/jobs") {
+    return role === "company" ? <CompanyJobsPage email={email} /> : <JobListPage email={email} role={role} />;
+  }
   if (pathname === "/" || pathname === "/jobs") {
-    return <JobListPage email={email} />;
+    return role === "company" && pathname === "/" ? <CompanyJobsPage email={email} /> : <JobListPage email={email} role={role} />;
+  }
+  if (role === "company") {
+    return <CompanyJobsPage email={email} />;
   }
 
   return (

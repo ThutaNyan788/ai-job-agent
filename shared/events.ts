@@ -76,8 +76,10 @@ export type JobPost = {
   niceToHave: string[];
   benefits: string[];
   postedAt: string;
-  status: "active" | "closed";
+  status: "active" | "draft" | "closed";
 };
+
+export type JobPostInput = Omit<JobPost, "id" | "postedAt">;
 
 export type JobMatch = JobPost & {
   score: number;

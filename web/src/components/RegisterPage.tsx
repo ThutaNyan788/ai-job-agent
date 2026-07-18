@@ -5,10 +5,13 @@ import { handleInternalLink, navigate } from "@/navigation";
 import { AuthPageShell, Divider, GoogleButton } from "./AuthPageShell";
 import { Field, PasswordToggle, inputClass, primaryButtonClass } from "./LoginPage";
 
+type UserRole = "user" | "company";
+
 export function RegisterPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [role, setRole] = useState<UserRole>("user");
   const [agreed, setAgreed] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -22,13 +25,19 @@ export function RegisterPage() {
     }
     setBusy(true);
     setError(null);
-    const result = await authClient.signUp.email({ name, email, password, callbackURL: location.origin });
+    const result = await authClient.signUp.email({
+      name,
+      email,
+      password,
+      role,
+      callbackURL: location.origin,
+    } as Parameters<typeof authClient.signUp.email>[0] & { role: UserRole });
     setBusy(false);
     if (result.error) {
       setError(result.error.message ?? "Could not create the account.");
       return;
     }
-    navigate("/");
+    navigate(role === "company" ? "/company/jobs" : "/jobs");
   }
 
   async function signUpWithGoogle() {
@@ -44,6 +53,13 @@ export function RegisterPage() {
   return (
     <AuthPageShell title="Create your account" subtitle="Start building a job shortlist that fits." artworkTitle="Meet your next opportunity." artworkText="Create a profile once, then return anytime to refine your answers and compare your matches.">
       <form className="space-y-4" onSubmit={submit}>
+        <fieldset>
+          <legend className="mb-2 text-sm font-semibold text-slate-700">I want to</legend>
+          <div className="grid grid-cols-2 gap-2">
+            <RoleOption checked={role === "user"} label="Find a job" description="Candidate account" onChange={() => setRole("user")} />
+            <RoleOption checked={role === "company"} label="Hire talent" description="Company account" onChange={() => setRole("company")} />
+          </div>
+        </fieldset>
         <Field label="Full name">
           <input className={inputClass} id="register-name" type="text" autoComplete="name" placeholder="Alex Morgan" value={name} onChange={(event) => setName(event.target.value)} required />
         </Field>
@@ -65,9 +81,23 @@ export function RegisterPage() {
           {busy && <Loader2 className="size-4 animate-spin" />} Create account
         </button>
       </form>
-      <Divider text="or register with" />
-      <GoogleButton busy={busy} onClick={() => void signUpWithGoogle()} label="Continue with Google" />
+      {role === "user" && (
+        <>
+          <Divider text="or register with" />
+          <GoogleButton busy={busy} onClick={() => void signUpWithGoogle()} label="Continue with Google" />
+        </>
+      )}
       <p className="mt-6 text-center text-sm text-slate-500">Already have an account?{" "}<a className="font-bold text-pink-700 hover:underline" href="/login" onClick={handleInternalLink}>Sign in</a></p>
     </AuthPageShell>
+  );
+}
+
+function RoleOption({ checked, label, description, onChange }: { checked: boolean; label: string; description: string; onChange: () => void }) {
+  return (
+    <label className={`cursor-pointer rounded-xl border p-3 transition ${checked ? "border-pink-400 bg-pink-50 ring-2 ring-pink-100" : "border-slate-200 hover:border-pink-200"}`}>
+      <input type="radio" name="role" className="sr-only" checked={checked} onChange={onChange} />
+      <span className="block text-sm font-bold text-slate-900">{label}</span>
+      <span className="mt-0.5 block text-xs text-slate-500">{description}</span>
+    </label>
   );
 }

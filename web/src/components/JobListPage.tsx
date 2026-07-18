@@ -25,7 +25,7 @@ type Filters = {
 
 const emptyFilters: Filters = { q: "", location: "", experience: "", workType: "" };
 
-export function JobListPage({ email }: { email: string }) {
+export function JobListPage({ email, role = "user" }: { email: string; role?: "user" | "company" }) {
   const [filters, setFilters] = useState(emptyFilters);
   const [jobs, setJobs] = useState<JobPost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,7 +59,7 @@ export function JobListPage({ email }: { email: string }) {
 
   return (
     <div className="min-h-screen bg-white text-slate-800 antialiased selection:bg-pink-100 selection:text-pink-700">
-      <MarketplaceHeader email={email} />
+      <MarketplaceHeader email={email} role={role} />
       <section className="relative overflow-hidden px-4 pb-14 pt-16 text-center sm:px-6 sm:pb-20 sm:pt-24">
         <div className="absolute left-1/2 top-20 -z-10 size-[32rem] -translate-x-1/2 rounded-full bg-pink-100/60 blur-3xl" />
         <div className="mx-auto max-w-4xl">

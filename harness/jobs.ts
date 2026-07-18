@@ -1,5 +1,5 @@
-import { eq } from "drizzle-orm";
-import type { JobMatch, JobPost } from "@shared/events";
+import { desc, eq } from "drizzle-orm";
+import type { JobMatch, JobPost, JobPostInput } from "@shared/events";
 
 export { JOB_POSTS } from "./job-seed";
 
@@ -48,6 +48,29 @@ export async function listJobs(): Promise<JobPost[]> {
     .map((row) => row.data)
     .filter((job) => job.status === "active")
     .sort((a, b) => Date.parse(b.postedAt) - Date.parse(a.postedAt));
+}
+
+export async function listJobsForCompany(ownerUserId: string): Promise<JobPost[]> {
+  const { db, jobPosts } = await import("./db");
+  const rows = await db
+    .select({ data: jobPosts.data })
+    .from(jobPosts)
+    .where(eq(jobPosts.ownerUserId, ownerUserId))
+    .orderBy(desc(jobPosts.id));
+  return rows
+    .map((row) => row.data)
+    .sort((a, b) => Date.parse(b.postedAt) - Date.parse(a.postedAt));
+}
+
+export async function createCompanyJob(ownerUserId: string, input: JobPostInput): Promise<JobPost> {
+  const { db, jobPosts } = await import("./db");
+  const job: JobPost = {
+    ...input,
+    id: `job_${crypto.randomUUID()}`,
+    postedAt: new Date().toISOString(),
+  };
+  await db.insert(jobPosts).values({ id: job.id, ownerUserId, data: job });
+  return job;
 }
 
 export async function searchJobs(skills: string[], experienceYears: number): Promise<JobMatch[]> {

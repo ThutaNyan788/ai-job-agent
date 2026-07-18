@@ -6,6 +6,7 @@ import express from "express";
 import { createServer, type IncomingMessage } from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
 import { fromNodeHeaders, toNodeHandler } from "better-auth/node";
+import { z } from "zod";
 import { assertAuthConfiguration, auth } from "./auth";
 import {
   ensureSchema,
@@ -17,7 +18,7 @@ import {
 import { subscribe, history } from "../harness/bus";
 import { runAgentWorkflow } from "../harness/runtime";
 import { runApplicationWorkflow } from "../harness/applications";
-import { findJob, listJobs } from "../harness/jobs";
+import { createCompanyJob, findJob, listJobs, listJobsForCompany } from "../harness/jobs";
 import type { ClientMessage } from "@shared/events";
 
 const PORT = Number(process.env.PORT ?? 8787);
@@ -25,8 +26,50 @@ const APP_ORIGIN = process.env.APP_ORIGIN ?? "http://localhost:5173";
 
 async function authenticatedUser(headers: Parameters<typeof fromNodeHeaders>[0]) {
   const session = await auth.api.getSession({ headers: fromNodeHeaders(headers) });
-  return session?.user ?? null;
+  const user = session?.user;
+  return user ? (user as typeof user & { role?: string }) : null;
 }
+
+const jobPostInputSchema = z.object({
+  company: z.object({
+    name: z.string().trim().min(1).max(160),
+    website: z.string().trim().url().max(500),
+  }),
+  title: z.string().trim().min(1).max(160),
+  description: z.string().trim().min(20).max(10_000),
+  location: z.object({
+    country: z.string().trim().min(1).max(120),
+    city: z.string().trim().min(1).max(120),
+    workType: z.enum(["remote", "onsite", "hybrid"]),
+  }),
+  employmentType: z.enum(["full_time", "part_time", "contract", "internship"]),
+  experienceLevel: z.enum(["junior", "mid", "senior", "lead"]),
+  yearsOfExperience: z.object({
+    min: z.number().int().min(0).max(80),
+    max: z.number().int().min(0).max(80),
+  }),
+  salary: z.object({
+    min: z.number().min(0),
+    max: z.number().min(0),
+    currency: z.string().trim().min(3).max(3).transform((value) => value.toUpperCase()),
+  }),
+  requiredSkills: z.array(z.object({
+    name: z.string().trim().min(1).max(100),
+    level: z.enum(["beginner", "intermediate", "advanced"]),
+  })).min(1).max(50),
+  responsibilities: z.array(z.string().trim().min(1).max(500)).min(1).max(50),
+  requirements: z.array(z.string().trim().min(1).max(500)).min(1).max(50),
+  niceToHave: z.array(z.string().trim().min(1).max(500)).max(50),
+  benefits: z.array(z.string().trim().min(1).max(500)).max(50),
+  status: z.enum(["active", "draft", "closed"]),
+}).superRefine((job, context) => {
+  if (job.yearsOfExperience.max < job.yearsOfExperience.min) {
+    context.addIssue({ code: "custom", path: ["yearsOfExperience", "max"], message: "Maximum experience must be at least the minimum." });
+  }
+  if (job.salary.max < job.salary.min) {
+    context.addIssue({ code: "custom", path: ["salary", "max"], message: "Maximum salary must be at least the minimum." });
+  }
+});
 
 async function main() {
   assertAuthConfiguration();
@@ -92,6 +135,25 @@ async function main() {
     res.json({ job });
   });
 
+  app.get("/api/company/jobs", async (req, res) => {
+    const user = await authenticatedUser(req.headers);
+    if (!user) return res.sendStatus(401);
+    if (user.role !== "company") return res.status(403).json({ error: "A company account is required." });
+    res.json({ jobs: await listJobsForCompany(user.id) });
+  });
+
+  app.post("/api/company/jobs", async (req, res) => {
+    const user = await authenticatedUser(req.headers);
+    if (!user) return res.sendStatus(401);
+    if (user.role !== "company") return res.status(403).json({ error: "A company account is required." });
+    const parsed = jobPostInputSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid job post." });
+    }
+    const job = await createCompanyJob(user.id, parsed.data);
+    res.status(201).json({ job });
+  });
+
   // Clear the durable log. The inspector calls this, then reloads.
   app.post("/api/clear", async (req, res) => {
     const user = await authenticatedUser(req.headers);
@@ -115,7 +177,7 @@ async function main() {
   const server = createServer(app);
   const wss = new WebSocketServer({ noServer: true });
   const socketUsers = new WeakMap<WebSocket, string>();
-  const upgradeUsers = new WeakMap<IncomingMessage, { id: string }>();
+  const upgradeUsers = new WeakMap<IncomingMessage, { id: string; role?: string }>();
 
   server.on("upgrade", (request, socket, head) => {
     void (async () => {
@@ -173,6 +235,7 @@ async function main() {
         });
       }
       if (message.type === "request_application") {
+        if (user.role === "company") return;
         const job = await findJob(message.jobId);
         if (!job) return;
         await DBOS.startWorkflow(runApplicationWorkflow)({ userId: user.id, job });
