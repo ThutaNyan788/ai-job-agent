@@ -5,6 +5,7 @@ import type { AgentEvent, ApplicationStatus, JobPost } from "@shared/events";
 import {
   candidateProfileContentSchema,
   EMPTY_CANDIDATE_PROFILE,
+  profilePatchValues,
   type CandidateProfile,
   type CandidateProfileContent,
   type CandidateProfilePatch,
@@ -188,9 +189,7 @@ export async function saveCandidateProfile(
   const current = await loadCandidateProfile(userId);
   const profile: CandidateProfile = {
     ...current,
-    ...Object.fromEntries(
-      Object.entries(update).filter(([, value]) => value !== undefined),
-    ),
+    ...profilePatchValues(update),
     links: update.replace
       ? update.links ?? []
       : mergeEntries(current.links, update.links, (entry) => entry.url.toLowerCase()),

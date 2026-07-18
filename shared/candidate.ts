@@ -72,6 +72,20 @@ export type CandidateProfile = CandidateProfileContent & {
   revision: number;
 };
 
+export function profilePatchValues(
+  update: CandidateProfilePatch,
+): Partial<CandidateProfilePatch> {
+  return Object.fromEntries(
+    Object.entries(update).filter(
+      ([, value]) =>
+        value !== undefined &&
+        // Structured tool calls can encode omitted nullable fields as null.
+        // Only a full replacement (such as a CV import) may clear stored data.
+        (update.replace === true || value !== null),
+    ),
+  ) as Partial<CandidateProfilePatch>;
+}
+
 export type CvPreview = CandidateProfileContent & {
   previewId: string;
   profileRevision: number;

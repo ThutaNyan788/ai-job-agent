@@ -17,6 +17,7 @@ import { JobDetailsPage } from "./components/JobDetailsPage";
 import { CompanyJobsPage } from "./components/CompanyJobsPage";
 import { JobPostingForm } from "./components/JobPostingForm";
 import { authClient } from "./auth-client";
+import { interviewUrlForTitle } from "./interview";
 import { navigate, usePathname } from "./navigation";
 
 export function App() {
@@ -87,13 +88,19 @@ function AuthenticatedApp({ userId, email, role, pathname }: { userId: string; e
     send({ type: "request_application", jobId });
   }
 
-  async function decideApplication(workflowId: string, approved: boolean) {
-    await fetch(`http://${location.hostname}:8787/api/approve/${workflowId}`, {
+  async function decideApplication(workflowId: string, approved: boolean, jobTitle: string) {
+    const response = await fetch(`http://${location.hostname}:8787/api/approve/${workflowId}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
       body: JSON.stringify({ approved }),
     });
+    if (!response.ok) {
+      throw new Error(`Application decision failed (${response.status}).`);
+    }
+    if (approved) {
+      window.location.assign(interviewUrlForTitle(jobTitle));
+    }
   }
 
   const jobDetailsMatch = pathname.match(/^\/jobs\/([^/]+)$/);

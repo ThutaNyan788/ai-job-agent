@@ -11,7 +11,7 @@ export function JobDetailsPane({
   job: JobMatch | null;
   application: ApplicationStatusEvent | null;
   onRequestApplication: (job: JobMatch) => void;
-  onDecideApplication: (workflowId: string, approved: boolean) => void;
+  onDecideApplication: (workflowId: string, approved: boolean, jobTitle: string) => void;
 }) {
 
   if (!job) {
@@ -105,7 +105,7 @@ function ApplicationAction({
   job: JobMatch;
   application: ApplicationStatusEvent | null;
   onRequestApplication: (job: JobMatch) => void;
-  onDecideApplication: (workflowId: string, approved: boolean) => void;
+  onDecideApplication: (workflowId: string, approved: boolean, jobTitle: string) => void;
 }) {
   if (!application) {
     return (
@@ -123,10 +123,10 @@ function ApplicationAction({
           This application is fictional and will be recorded only in this demo.
         </p>
         <div className="mt-3 flex gap-2">
-          <Button size="sm" onClick={() => onDecideApplication(application.workflowId, true)}>
+          <Button size="sm" onClick={() => onDecideApplication(application.workflowId, true, job.title)}>
             Approve
           </Button>
-          <Button size="sm" variant="outline" onClick={() => onDecideApplication(application.workflowId, false)}>
+          <Button size="sm" variant="outline" onClick={() => onDecideApplication(application.workflowId, false, job.title)}>
             Cancel
           </Button>
         </div>

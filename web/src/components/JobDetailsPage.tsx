@@ -29,7 +29,7 @@ export function JobDetailsPage({
   application: ApplicationStatusEvent | null;
   connected: boolean;
   onRequestApplication: (jobId: string) => void;
-  onDecideApplication: (workflowId: string, approved: boolean) => Promise<void>;
+  onDecideApplication: (workflowId: string, approved: boolean, jobTitle: string) => Promise<void>;
 }) {
   const [job, setJob] = useState<JobPost | null>(null);
   const [loading, setLoading] = useState(true);
@@ -47,10 +47,10 @@ export function JobDetailsPage({
   }, [jobId]);
 
   async function decide(approved: boolean) {
-    if (!application) return;
+    if (!application || !job) return;
     setDeciding(true);
     try {
-      await onDecideApplication(application.workflowId, approved);
+      await onDecideApplication(application.workflowId, approved, job.title);
     } finally {
       setDeciding(false);
     }
