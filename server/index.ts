@@ -3,6 +3,7 @@ import "./env";
 
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import express from "express";
+import multer from "multer";
 import { createServer, type IncomingMessage } from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
 import { fromNodeHeaders, toNodeHandler } from "better-auth/node";
@@ -14,6 +15,8 @@ import {
   clearCandidateProfile,
   clearEventLog,
   ownsApplicationWorkflow,
+  loadCvDocument,
+  saveCvUpload,
 } from "../harness/db";
 import { subscribe, history } from "../harness/bus";
 import { runAgentWorkflow } from "../harness/runtime";
@@ -95,6 +98,13 @@ async function main() {
   });
   app.all("/api/auth/*splat", toNodeHandler(auth));
   app.use(express.json());
+  const cvUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+    fileFilter: (_req, file, callback) => {
+      callback(null, file.mimetype === "application/pdf");
+    },
+  });
   app.get("/health", (_req, res) => res.json({ ok: true }));
   app.get("/", (_req, res) => res.redirect(APP_ORIGIN));
 
@@ -133,6 +143,41 @@ async function main() {
     const job = await findJob(req.params.jobId);
     if (!job || job.status !== "active") return res.sendStatus(404);
     res.json({ job });
+  });
+
+  app.post("/api/cv/uploads", async (req, res) => {
+    const user = await authenticatedUser(req.headers);
+    if (!user) return res.sendStatus(401);
+    cvUpload.single("file")(req, res, async (error) => {
+      try {
+        if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
+          return res.status(413).json({ error: "CV PDF must be 5 MB or smaller." });
+        }
+        if (error) return res.status(400).json({ error: "Upload a single PDF file." });
+        const file = req.file;
+        if (!file || file.mimetype !== "application/pdf") {
+          return res.status(400).json({ error: "Only PDF CV files are supported." });
+        }
+        if (file.size < 5 || file.buffer.subarray(0, 5).toString("ascii") !== "%PDF-") {
+          return res.status(400).json({ error: "The uploaded file is not a valid PDF." });
+        }
+        const upload = await saveCvUpload(user.id, file.originalname, file.mimetype, file.buffer);
+        return res.status(201).json(upload);
+      } catch (uploadError) {
+        console.error("CV upload failed:", uploadError);
+        return res.status(500).json({ error: "The CV could not be stored. Please try again." });
+      }
+    });
+  });
+
+  app.get("/api/cv/documents/:documentId", async (req, res) => {
+    const user = await authenticatedUser(req.headers);
+    if (!user) return res.sendStatus(401);
+    const document = await loadCvDocument(user.id, req.params.documentId);
+    if (!document) return res.sendStatus(404);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${document.fileName.replace(/["\r\n]/g, "")}"`);
+    return res.send(document.data);
   });
 
   app.get("/api/company/jobs", async (req, res) => {
@@ -232,6 +277,7 @@ async function main() {
         await DBOS.startWorkflow(runAgentWorkflow)({
           message: message.input,
           userId: user.id,
+          attachments: message.attachments,
         });
       }
       if (message.type === "request_application") {

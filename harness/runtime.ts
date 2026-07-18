@@ -5,7 +5,7 @@ import { EventType, type JobMatch } from "@shared/events";
 import { emit, emitTransient } from "./bus";
 import { jobSeekerAgent } from "./agents";
 import { model } from "./model";
-import { getCandidateProfile, runTool } from "./tools";
+import { getCandidateProfile, getLatestCvPreview, runTool } from "./tools";
 import {
   buildContext,
   summarize,
@@ -18,7 +18,11 @@ const MAX_STEPS = 12;
 
 type ToolCall = { toolCallId: string; toolName: string; input: Record<string, unknown> };
 type Turn = { text: string; toolCalls: ToolCall[]; responseMessages: ModelMessage[] };
-export type JobWorkflowInput = { message: string; userId: string };
+export type JobWorkflowInput = {
+  message: string;
+  userId: string;
+  attachments?: { id: string; kind: "cv_pdf"; name: string }[];
+};
 
 async function modelTurn(
   workflowId: string,
@@ -55,7 +59,20 @@ async function toolStep(
     name: call.toolName,
     args: call.input,
   }, userId);
-  const output = await runTool(call.toolName, call.input, { userId });
+  let output: Record<string, unknown>;
+  try {
+    output = await runTool(call.toolName, call.input, { userId });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await emit({
+      type: EventType.ToolFailed,
+      workflowId,
+      toolCallId: call.toolCallId,
+      name: call.toolName,
+      error: message,
+    }, userId);
+    return { error: message };
+  }
   await emit({
     type: EventType.ToolCompleted,
     workflowId,
@@ -64,6 +81,32 @@ async function toolStep(
   }, userId);
   if (call.toolName === "searchJobs") {
     await emit({ type: EventType.JobMatches, workflowId, jobs: output.matches as JobMatch[] }, userId);
+  }
+  if (call.toolName === "extractUploadedCv") {
+    await emit({
+      type: EventType.CvExtracted,
+      workflowId,
+      profile: output.profile,
+      warnings: (output.warnings as string[] | undefined) ?? [],
+      missingFields: (output.missingFields as string[] | undefined) ?? [],
+    }, userId);
+  }
+  if (call.toolName === "prepareCvPreview") {
+    await emit({
+      type: EventType.CvPreviewReady,
+      workflowId,
+      preview: output.preview ?? null,
+      missingFields: (output.missingFields as string[] | undefined) ?? [],
+    }, userId);
+  }
+  if (call.toolName === "generateCvPdf" && typeof output.documentId === "string") {
+    await emit({
+      type: EventType.CvGenerated,
+      workflowId,
+      documentId: output.documentId,
+      fileName: String(output.fileName ?? "candidate-cv.pdf"),
+      downloadUrl: String(output.downloadUrl ?? ""),
+    }, userId);
   }
   return output;
 }
@@ -85,6 +128,7 @@ async function agentWorkflow(input: JobWorkflowInput): Promise<string> {
   );
 
   let profile = await DBOS.runStep(() => getCandidateProfile(input.userId), { name: "load-profile" });
+  let pendingPreview = await DBOS.runStep(() => getLatestCvPreview(input.userId), { name: "load-cv-preview" });
   const turns: ModelMessage[][] = [];
   let summary = "";
 
@@ -102,7 +146,14 @@ async function agentWorkflow(input: JobWorkflowInput): Promise<string> {
             type: EventType.MemoryCompacted,
             workflowId,
             summarizedTurns: old.length,
-            contextTokens: estimateTokens(buildContext(jobSeekerAgent.systemPrompt(profile), input.message, summary, turns)),
+            contextTokens: estimateTokens(
+              buildContext(
+                jobSeekerAgent.systemPrompt(profile, pendingPreview?.previewId),
+                input.message,
+                summary,
+                turns,
+              ),
+            ),
             summary,
           }, input.userId),
           { name: `compacted-${step}` },
@@ -110,7 +161,15 @@ async function agentWorkflow(input: JobWorkflowInput): Promise<string> {
       }
     }
 
-    const context = buildContext(jobSeekerAgent.systemPrompt(profile), input.message, summary, turns);
+    const attachmentContext = input.attachments?.length
+      ? `\n\nAttached files:\n${input.attachments.map((file) => `- ${file.name} (uploadId: ${file.id}, kind: ${file.kind})`).join("\n")}`
+      : "";
+    const context = buildContext(
+      jobSeekerAgent.systemPrompt(profile, pendingPreview?.previewId),
+      input.message + attachmentContext,
+      summary,
+      turns,
+    );
     const turn = await DBOS.runStep(() => modelTurn(workflowId, input.userId, context), { name: `model-${step}` });
     const turnMessages: ModelMessage[] = [...turn.responseMessages];
 
@@ -128,8 +187,11 @@ async function agentWorkflow(input: JobWorkflowInput): Promise<string> {
       const output = await DBOS.runStep(() => toolStep(workflowId, input.userId, call), {
         name: `tool-${call.toolCallId}`,
       });
-      if (call.toolName === "saveCandidateProfile" && output.profile) {
+      if ((call.toolName === "updateCandidateProfile" || call.toolName === "confirmCandidateProfile" || call.toolName === "extractUploadedCv") && output.profile) {
         profile = output.profile as typeof profile;
+      }
+      if (call.toolName === "prepareCvPreview" && output.preview) {
+        pendingPreview = output.preview as NonNullable<typeof pendingPreview>;
       }
       turnMessages.push(toolResultMessage(call, output as JSONValue));
     }

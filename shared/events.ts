@@ -24,6 +24,9 @@ export enum EventType {
   ToolFailed = "tool.failed",
   // job matching: a ranked fictional-job shortlist ready for the chat UI
   JobMatches = "job.matches",
+  CvExtracted = "cv.extracted",
+  CvPreviewReady = "cv.preview-ready",
+  CvGenerated = "cv.generated",
   ApplicationStatus = "application.status",
   // memory: old turns compacted into a running summary
   MemoryCompacted = "memory.compacted",
@@ -85,6 +88,15 @@ export type JobMatch = JobPost & {
   score: number;
   matchedSkills: string[];
   reason: string;
+  scoreBreakdown: {
+    skills?: number;
+    targetRole?: number;
+    experience?: number;
+    workType?: number;
+    countryRegion?: number;
+  };
+  profileStrengths: string[];
+  gaps: string[];
 };
 
 export type ApplicationStatus = "pending" | "submitted" | "cancelled";
@@ -104,8 +116,11 @@ export type EventInput =
   | { type: EventType.ModelCompleted; workflowId: string; text: string }
   | { type: EventType.ToolRequested; workflowId: string; toolCallId: string; name: string; args: unknown }
   | { type: EventType.ToolCompleted; workflowId: string; toolCallId: string; result: unknown }
-  | { type: EventType.ToolFailed; workflowId: string; toolCallId: string; error: string }
+  | { type: EventType.ToolFailed; workflowId: string; toolCallId: string; name?: string; error: string }
   | { type: EventType.JobMatches; workflowId: string; jobs: JobMatch[] }
+  | { type: EventType.CvExtracted; workflowId: string; profile: unknown; warnings: string[]; missingFields: string[] }
+  | { type: EventType.CvPreviewReady; workflowId: string; preview: unknown; missingFields: string[] }
+  | { type: EventType.CvGenerated; workflowId: string; documentId: string; fileName: string; downloadUrl: string }
   | ApplicationStatusEvent
   | { type: EventType.MemoryCompacted; workflowId: string; summarizedTurns: number; contextTokens: number; summary: string }
   | { type: EventType.AgentHandoff; workflowId: string; from: string; to: string; reason: string }
@@ -125,5 +140,9 @@ export type Emit = (event: EventInput) => void;
 
 // Messages the browser sends back to the server (over the same socket).
 export type ClientMessage =
-  | { type: "submit_task"; input: string }
+  | {
+      type: "submit_task";
+      input: string;
+      attachments?: { id: string; kind: "cv_pdf"; name: string }[];
+    }
   | { type: "request_application"; jobId: string };

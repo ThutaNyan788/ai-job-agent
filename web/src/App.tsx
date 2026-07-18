@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Component, useState, type ErrorInfo, type ReactNode } from "react";
 import { LogOut, Moon, Sun } from "lucide-react";
 import { EventType, type AgentEvent, type ApplicationStatusEvent, type JobMatch } from "@shared/events";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -33,7 +33,42 @@ export function App() {
   }
 
   const role = ((session.user as typeof session.user & { role?: "user" | "company" }).role ?? "user");
-  return <AuthenticatedApp userId={session.user.id} email={session.user.email} role={role} pathname={pathname} />;
+  return (
+    <AssistantErrorBoundary>
+      <AuthenticatedApp userId={session.user.id} email={session.user.email} role={role} pathname={pathname} />
+    </AssistantErrorBoundary>
+  );
+}
+
+class AssistantErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state: { error: Error | null } = { error: null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("Assistant page failed to render", error, info);
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <main className="flex min-h-screen items-center justify-center bg-white p-6 text-slate-700">
+          <div className="max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h1 className="text-lg font-semibold">The assistant could not load</h1>
+            <p className="mt-2 text-sm text-slate-500">
+              Please refresh the page. Your saved profile and job history are still safe.
+            </p>
+            <Button className="mt-4" onClick={() => window.location.reload()}>
+              Refresh assistant
+            </Button>
+          </div>
+        </main>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 function AuthenticatedApp({ userId, email, role, pathname }: { userId: string; email: string; role: "user" | "company"; pathname: string }) {

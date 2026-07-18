@@ -1,7 +1,17 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { bigserial, index, jsonb, pgTable, primaryKey, real, text } from "drizzle-orm/pg-core";
+import { bigserial, index, integer, jsonb, pgTable, primaryKey, real, text, timestamp } from "drizzle-orm/pg-core";
 import type { AgentEvent, ApplicationStatus, JobPost } from "@shared/events";
+import {
+  candidateProfileContentSchema,
+  EMPTY_CANDIDATE_PROFILE,
+  type CandidateProfile,
+  type CandidateProfileContent,
+  type CandidateProfilePatch,
+  type CvPreview,
+} from "@shared/candidate";
+
+export type { CandidateProfile } from "@shared/candidate";
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
@@ -30,19 +40,9 @@ export const jobPosts = pgTable(
   (table) => [index("job_posts_owner_user_id_idx").on(table.ownerUserId)],
 );
 
-export type CandidateProfile = {
-  position: string | null;
-  programmingLanguages: string[];
-  projectCount: number | null;
-  projectDetails: string | null;
-  skills: string[];
-  experienceYears: number | null;
-  countryRegion: string | null;
-  jobType: "remote" | "onsite" | "hybrid" | null;
-};
-
 export const candidateProfiles = pgTable("candidate_profiles", {
   userId: text("user_id").primaryKey(),
+  // Legacy columns remain during the migration window. New code uses profileData.
   position: text("position"),
   programmingLanguages: jsonb("programming_languages").$type<string[]>().notNull(),
   projectCount: real("project_count"),
@@ -51,7 +51,49 @@ export const candidateProfiles = pgTable("candidate_profiles", {
   experienceYears: real("experience_years"),
   countryRegion: text("country_region"),
   jobType: text("job_type").$type<CandidateProfile["jobType"]>(),
+  profileData: jsonb("profile_data").$type<CandidateProfileContent>().notNull(),
+  profileStatus: text("profile_status").$type<CandidateProfile["status"]>().notNull(),
+  profileSource: text("profile_source").$type<CandidateProfile["source"]>().notNull(),
+  profileRevision: integer("profile_revision").notNull(),
 });
+
+export const cvUploads = pgTable(
+  "cv_uploads",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    fileName: text("file_name").notNull(),
+    mimeType: text("mime_type").notNull(),
+    dataBase64: text("data_base64"),
+    createdAt: timestamp("created_at").notNull(),
+  },
+  (table) => [index("cv_uploads_user_id_idx").on(table.userId)],
+);
+
+export const cvPreviews = pgTable(
+  "cv_previews",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    profileRevision: integer("profile_revision").notNull(),
+    profileSnapshot: jsonb("profile_snapshot").$type<CandidateProfileContent>().notNull(),
+    createdAt: timestamp("created_at").notNull(),
+  },
+  (table) => [index("cv_previews_user_id_idx").on(table.userId)],
+);
+
+export const cvDocuments = pgTable(
+  "cv_documents",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    fileName: text("file_name").notNull(),
+    dataBase64: text("data_base64").notNull(),
+    profileSnapshot: jsonb("profile_snapshot").$type<CandidateProfileContent>().notNull(),
+    createdAt: timestamp("created_at").notNull(),
+  },
+  (table) => [index("cv_documents_user_id_idx").on(table.userId)],
+);
 
 export type ApplicationRecord = {
   userId: string;
@@ -103,96 +145,107 @@ function normalizeLabels(skills: string[]): string[] {
 
 export async function loadCandidateProfile(userId: string): Promise<CandidateProfile> {
   const rows = await client<{
-    position: string | null;
-    programming_languages: string[];
-    project_count: number | null;
-    project_details: string | null;
-    skills: string[];
-    experience_years: number | null;
-    country_region: string | null;
-    job_type: CandidateProfile["jobType"];
+    profile_data: CandidateProfileContent;
+    profile_status: CandidateProfile["status"];
+    profile_source: CandidateProfile["source"];
+    profile_revision: number;
   }[]>`
-    SELECT position, programming_languages, project_count, project_details,
-      skills, experience_years, country_region, job_type
+    SELECT profile_data, profile_status, profile_source, profile_revision
     FROM candidate_profiles WHERE user_id = ${userId}
   `;
   const profile = rows[0];
-  return profile
-    ? {
-        position: profile.position,
-        programmingLanguages: profile.programming_languages,
-        projectCount: profile.project_count,
-        projectDetails: profile.project_details,
-        skills: profile.skills,
-        experienceYears: profile.experience_years,
-        countryRegion: profile.country_region,
-        jobType: profile.job_type,
-      }
-    : {
-        position: null,
-        programmingLanguages: [],
-        projectCount: null,
-        projectDetails: null,
-        skills: [],
-        experienceYears: null,
-        countryRegion: null,
-        jobType: null,
-      };
+  if (!profile) return structuredClone(EMPTY_CANDIDATE_PROFILE);
+  return {
+    ...candidateProfileContentSchema.parse(profile.profile_data),
+    status: profile.profile_status,
+    source: profile.profile_source,
+    revision: profile.profile_revision,
+  };
+}
+
+function mergeStringList(current: string[], update: string[] | undefined): string[] {
+  return update === undefined ? current : normalizeLabels([...current, ...update]);
+}
+
+function mergeEntries<T>(
+  current: T[],
+  update: T[] | undefined,
+  key: (entry: T) => string,
+): T[] {
+  if (update === undefined) return current;
+  const merged = new Map(current.map((entry) => [key(entry), entry]));
+  for (const entry of update) {
+    const entryKey = key(entry);
+    merged.set(entryKey, { ...(merged.get(entryKey) ?? {}), ...entry });
+  }
+  return [...merged.values()];
 }
 
 export async function saveCandidateProfile(
   userId: string,
-  update: Partial<CandidateProfile>,
+  update: CandidateProfilePatch,
 ): Promise<CandidateProfile> {
   const current = await loadCandidateProfile(userId);
   const profile: CandidateProfile = {
-    position:
-      update.position === undefined
-        ? current.position
-        : update.position === null
-          ? null
-          : update.position.trim(),
-    programmingLanguages:
-      update.programmingLanguages === undefined
-        ? current.programmingLanguages
-        : normalizeLabels(update.programmingLanguages),
-    projectCount: update.projectCount === undefined ? current.projectCount : update.projectCount,
-    projectDetails:
-      update.projectDetails === undefined
-        ? current.projectDetails
-        : update.projectDetails === null
-          ? null
-          : update.projectDetails.trim(),
-    skills: update.skills === undefined ? current.skills : normalizeLabels(update.skills),
-    experienceYears:
-      update.experienceYears === undefined ? current.experienceYears : update.experienceYears,
-    countryRegion:
-      update.countryRegion === undefined
-        ? current.countryRegion
-        : update.countryRegion === null
-          ? null
-          : update.countryRegion.trim(),
-    jobType: update.jobType === undefined ? current.jobType : update.jobType,
+    ...current,
+    ...Object.fromEntries(
+      Object.entries(update).filter(([, value]) => value !== undefined),
+    ),
+    links: update.replace
+      ? update.links ?? []
+      : mergeEntries(current.links, update.links, (entry) => entry.url.toLowerCase()),
+    skills: update.replace ? update.skills ?? [] : mergeStringList(current.skills, update.skills),
+    programmingLanguages: update.replace
+      ? update.programmingLanguages ?? []
+      : mergeStringList(current.programmingLanguages, update.programmingLanguages),
+    workExperience: update.replace
+      ? update.workExperience ?? []
+      : mergeEntries(
+          current.workExperience,
+          update.workExperience,
+          (entry) => `${entry.company}|${entry.title}|${entry.startDate}`.toLowerCase(),
+        ),
+    education: update.replace
+      ? update.education ?? []
+      : mergeEntries(
+          current.education,
+          update.education,
+          (entry) => `${entry.institution}|${entry.qualification}`.toLowerCase(),
+        ),
+    projects: update.replace
+      ? update.projects ?? []
+      : mergeEntries(current.projects, update.projects, (entry) => entry.name.toLowerCase()),
+    certifications: update.replace
+      ? update.certifications ?? []
+      : mergeStringList(current.certifications, update.certifications),
+    spokenLanguages: update.replace
+      ? update.spokenLanguages ?? []
+      : mergeStringList(current.spokenLanguages, update.spokenLanguages),
+    source: update.source ?? current.source,
+    status: update.status ?? "draft",
+    revision: current.revision + 1,
   };
+  const content = candidateProfileContentSchema.parse(profile);
   await client`
     INSERT INTO candidate_profiles (
       user_id, position, programming_languages, project_count, project_details,
-      skills, experience_years, country_region, job_type
+      skills, experience_years, country_region, job_type, profile_data,
+      profile_status, profile_source, profile_revision
     )
     VALUES (
-      ${userId}, ${profile.position}, ${JSON.stringify(profile.programmingLanguages)}::jsonb,
-      ${profile.projectCount}, ${profile.projectDetails}, ${JSON.stringify(profile.skills)}::jsonb,
-      ${profile.experienceYears}, ${profile.countryRegion}, ${profile.jobType}
+      ${userId}, ${profile.targetRole}, ${JSON.stringify(profile.programmingLanguages)}::jsonb,
+      ${profile.projects.length}, ${profile.projects[0]?.description ?? null},
+      ${JSON.stringify(profile.skills)}::jsonb, ${profile.experienceYears},
+      ${profile.countryRegion}, ${profile.jobType}, ${JSON.stringify(content)}::jsonb,
+      ${profile.status}, ${profile.source}, ${profile.revision}
     )
     ON CONFLICT (user_id) DO UPDATE SET
-      position = EXCLUDED.position,
-      programming_languages = EXCLUDED.programming_languages,
-      project_count = EXCLUDED.project_count,
-      project_details = EXCLUDED.project_details,
-      skills = EXCLUDED.skills,
-      experience_years = EXCLUDED.experience_years,
-      country_region = EXCLUDED.country_region,
-      job_type = EXCLUDED.job_type
+      position = EXCLUDED.position, programming_languages = EXCLUDED.programming_languages,
+      project_count = EXCLUDED.project_count, project_details = EXCLUDED.project_details,
+      skills = EXCLUDED.skills, experience_years = EXCLUDED.experience_years,
+      country_region = EXCLUDED.country_region, job_type = EXCLUDED.job_type,
+      profile_data = EXCLUDED.profile_data, profile_status = EXCLUDED.profile_status,
+      profile_source = EXCLUDED.profile_source, profile_revision = EXCLUDED.profile_revision
   `;
   return profile;
 }
@@ -200,6 +253,135 @@ export async function saveCandidateProfile(
 export async function clearCandidateProfile(userId: string): Promise<void> {
   await client`DELETE FROM candidate_profiles WHERE user_id = ${userId}`;
   await client`DELETE FROM applications WHERE user_id = ${userId}`;
+  await client`DELETE FROM cv_uploads WHERE user_id = ${userId}`;
+  await client`DELETE FROM cv_previews WHERE user_id = ${userId}`;
+  await client`DELETE FROM cv_documents WHERE user_id = ${userId}`;
+}
+
+export type CvUploadRecord = {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  data: Buffer;
+};
+
+export async function saveCvUpload(
+  userId: string,
+  fileName: string,
+  mimeType: string,
+  data: Buffer,
+): Promise<{ id: string; fileName: string }> {
+  const id = `upload_${crypto.randomUUID()}`;
+  await client`
+    DELETE FROM cv_uploads
+    WHERE created_at < now() - interval '24 hours'
+  `;
+  await client`
+    INSERT INTO cv_uploads (id, user_id, file_name, mime_type, data_base64)
+    VALUES (${id}, ${userId}, ${fileName}, ${mimeType}, ${data.toString("base64")})
+  `;
+  return { id, fileName };
+}
+
+export async function loadCvUpload(userId: string, uploadId: string): Promise<CvUploadRecord | null> {
+  const rows = await client<{
+    id: string;
+    file_name: string;
+    mime_type: string;
+    data_base64: string | null;
+  }[]>`
+    SELECT id, file_name, mime_type, data_base64
+    FROM cv_uploads
+    WHERE id = ${uploadId} AND user_id = ${userId}
+      AND created_at >= now() - interval '24 hours'
+  `;
+  const upload = rows[0];
+  if (!upload?.data_base64) return null;
+  return {
+    id: upload.id,
+    fileName: upload.file_name,
+    mimeType: upload.mime_type,
+    data: Buffer.from(upload.data_base64, "base64"),
+  };
+}
+
+export async function clearCvUploadData(userId: string, uploadId: string): Promise<void> {
+  await client`
+    UPDATE cv_uploads SET data_base64 = NULL
+    WHERE id = ${uploadId} AND user_id = ${userId}
+  `;
+}
+
+export async function saveCvPreview(
+  userId: string,
+  profile: CandidateProfile,
+  snapshot: CandidateProfileContent,
+): Promise<CvPreview> {
+  const previewId = `preview_${crypto.randomUUID()}`;
+  await client`
+    INSERT INTO cv_previews (id, user_id, profile_revision, profile_snapshot)
+    VALUES (${previewId}, ${userId}, ${profile.revision}, ${JSON.stringify(snapshot)}::jsonb)
+  `;
+  return { ...snapshot, previewId, profileRevision: profile.revision };
+}
+
+export async function loadCvPreview(userId: string, previewId?: string): Promise<CvPreview | null> {
+  const rows = previewId
+    ? await client<{
+        id: string;
+        profile_revision: number;
+        profile_snapshot: CandidateProfileContent;
+      }[]>`
+        SELECT id, profile_revision, profile_snapshot
+        FROM cv_previews WHERE id = ${previewId} AND user_id = ${userId}
+      `
+    : await client<{
+        id: string;
+        profile_revision: number;
+        profile_snapshot: CandidateProfileContent;
+      }[]>`
+        SELECT id, profile_revision, profile_snapshot
+        FROM cv_previews WHERE user_id = ${userId}
+        ORDER BY created_at DESC LIMIT 1
+      `;
+  const preview = rows[0];
+  return preview
+    ? {
+        ...candidateProfileContentSchema.parse(preview.profile_snapshot),
+        previewId: preview.id,
+        profileRevision: preview.profile_revision,
+      }
+    : null;
+}
+
+export async function saveCvDocument(
+  userId: string,
+  fileName: string,
+  data: Buffer,
+  snapshot: CandidateProfileContent,
+): Promise<{ id: string; fileName: string }> {
+  const id = `cv_${crypto.randomUUID()}`;
+  await client`
+    INSERT INTO cv_documents (id, user_id, file_name, data_base64, profile_snapshot)
+    VALUES (
+      ${id}, ${userId}, ${fileName}, ${data.toString("base64")},
+      ${JSON.stringify(snapshot)}::jsonb
+    )
+  `;
+  return { id, fileName };
+}
+
+export async function loadCvDocument(
+  userId: string,
+  documentId: string,
+): Promise<{ fileName: string; data: Buffer } | null> {
+  const rows = await client<{ file_name: string; data_base64: string }[]>`
+    SELECT file_name, data_base64 FROM cv_documents
+    WHERE id = ${documentId} AND user_id = ${userId}
+  `;
+  return rows[0]
+    ? { fileName: rows[0].file_name, data: Buffer.from(rows[0].data_base64, "base64") }
+    : null;
 }
 
 function rowToApplication(row: {

@@ -32,6 +32,8 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { uploadCv } from "@/api";
+import { AUTH_BASE_URL } from "@/auth-client";
 
 // The left pane is a PROJECTION of the harness event stream. It never talks to
 // the model — it renders whatever events have arrived so far.
@@ -51,6 +53,9 @@ type Turn =
   | { id: string; role: "handoff"; from: string; to: string; reason: string }
   | { id: string; role: "supervision"; subagents: Subagent[] }
   | { id: string; role: "jobMatches"; jobs: JobMatch[] }
+  | { id: string; role: "cvExtracted"; profile: Record<string, unknown>; warnings: string[]; missingFields: string[] }
+  | { id: string; role: "cvPreview"; preview: Record<string, unknown> | null; missingFields: string[] }
+  | { id: string; role: "cvGenerated"; fileName: string; downloadUrl: string }
   | { id: string; role: "approval"; state: "pending" | "approved" | "rejected" }
   | { id: string; role: "log"; level: string; text: string };
 
@@ -123,6 +128,36 @@ function toTranscript(events: AgentEvent[]): { turns: Turn[]; running: boolean }
       case EventType.JobMatches:
         assistant = null;
         turns.push({ id: ev.id, role: "jobMatches", jobs: ev.jobs });
+        break;
+      case EventType.CvExtracted:
+        assistant = null;
+        turns.push({
+          id: ev.id,
+          role: "cvExtracted",
+          profile: (
+            ev.profile && typeof ev.profile === "object" ? ev.profile : {}
+          ) as Record<string, unknown>,
+          warnings: ev.warnings,
+          missingFields: ev.missingFields,
+        });
+        break;
+      case EventType.CvPreviewReady:
+        assistant = null;
+        turns.push({
+          id: ev.id,
+          role: "cvPreview",
+          preview: ev.preview as Record<string, unknown> | null,
+          missingFields: ev.missingFields,
+        });
+        break;
+      case EventType.CvGenerated:
+        assistant = null;
+        turns.push({
+          id: ev.id,
+          role: "cvGenerated",
+          fileName: ev.fileName,
+          downloadUrl: ev.downloadUrl,
+        });
         break;
       case EventType.AgentHandoff:
         assistant = null;
@@ -203,16 +238,37 @@ export function TaskPane({
   onJobSelect: (job: JobMatch) => void;
 }) {
   const [input, setInput] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const { turns, running } = toTranscript(events);
 
-  function submit() {
+  async function submit() {
     const text = input.trim();
-    if (!text) return;
+    if (!text && !selectedFile) return;
+    let attachment: { id: string; kind: "cv_pdf"; name: string } | undefined;
+    if (selectedFile) {
+      setUploading(true);
+      setUploadError(null);
+      try {
+        const upload = await uploadCv(selectedFile);
+        attachment = { id: upload.id, kind: "cv_pdf", name: upload.fileName };
+      } catch (error) {
+        setUploadError(error instanceof Error ? error.message : "Unable to upload the PDF.");
+        setUploading(false);
+        return;
+      }
+      setUploading(false);
+    }
     const sent = send({
       type: "submit_task",
-      input: text,
+      input: text || "Please review my uploaded CV and recommend suitable jobs.",
+      attachments: attachment ? [attachment] : undefined,
     });
-    if (sent) setInput("");
+    if (sent) {
+      setInput("");
+      setSelectedFile(null);
+    }
   }
 
   async function clearMemory() {
@@ -242,7 +298,7 @@ export function TaskPane({
         <ChatContainerContent className="space-y-5 px-4 py-5">
           {turns.length === 0 && (
             <p className="text-muted-foreground text-sm">
-              Tell me your skills and years of experience to find matching jobs.
+              Ask me to generate a CV from your skills, or attach a PDF CV to find matching jobs.
             </p>
           )}
           {turns.map((turn) => (
@@ -257,13 +313,29 @@ export function TaskPane({
       </ChatContainerRoot>
 
       <div className="border-t p-3">
-        <PromptInput value={input} onValueChange={setInput} onSubmit={submit} isLoading={running}>
+        <PromptInput value={input} onValueChange={setInput} onSubmit={() => void submit()} isLoading={running || uploading}>
           <PromptInputTextarea
             className="dark:bg-transparent"
-            placeholder="For example: I know React, TypeScript, and have 3 years of experience."
+            placeholder="For example: Generate a CV based on my React and TypeScript skills."
           />
           <PromptInputActions className="flex items-center justify-between pt-2">
             <div className="flex min-w-0 items-center gap-2">
+              <label className="text-muted-foreground hover:text-foreground flex cursor-pointer items-center gap-1 text-xs">
+                <input
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  className="sr-only"
+                  disabled={running || uploading}
+                  onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
+                />
+                <span aria-hidden="true">📎</span> Attach PDF
+              </label>
+              {selectedFile && (
+                <span className="text-muted-foreground max-w-36 truncate text-xs" title={selectedFile.name}>
+                  {selectedFile.name}
+                </span>
+              )}
+              {uploadError && <span className="text-destructive max-w-48 truncate text-xs">{uploadError}</span>}
               {(!connected || error) && (
                 <span className="text-destructive truncate text-xs">
                   {error ?? "Harness server disconnected."}
@@ -274,8 +346,8 @@ export function TaskPane({
               <Button
                 size="icon"
                 className="size-8 rounded-full"
-                onClick={submit}
-                disabled={!input.trim() || !connected}
+                onClick={() => void submit()}
+                disabled={(!input.trim() && !selectedFile) || !connected || uploading}
               >
                 <ArrowUp className="size-4" />
               </Button>
@@ -342,6 +414,23 @@ function TurnView({ turn, onJobSelect }: { turn: Turn; onJobSelect: (job: JobMat
       return <Tool toolPart={turn.part} />;
     case "jobMatches":
       return <JobMatchCards jobs={turn.jobs} onJobSelect={onJobSelect} />;
+    case "cvExtracted":
+      return <CvExtractedCard turn={turn} />;
+    case "cvPreview":
+      return <CvPreviewCard turn={turn} />;
+    case "cvGenerated":
+      return (
+        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm">
+          <p className="font-medium">Your CV is ready.</p>
+          <a
+            className="text-primary mt-1 inline-block underline"
+            href={`${AUTH_BASE_URL}${turn.downloadUrl}`}
+            download={turn.fileName}
+          >
+            Download {turn.fileName}
+          </a>
+        </div>
+      );
     case "supervision":
       return (
         <div className="space-y-2">
@@ -402,6 +491,55 @@ function TurnView({ turn, onJobSelect }: { turn: Turn; onJobSelect: (job: JobMat
   }
 }
 
+function CvExtractedCard({ turn }: { turn: Extract<Turn, { role: "cvExtracted" }> }) {
+  const profile = turn.profile;
+  const fields = ([
+    ["Name", profile.fullName],
+    ["Target role", profile.targetRole],
+    ["Email", profile.email],
+    ["Phone", profile.phone],
+    ["Skills", Array.isArray(profile.skills) ? profile.skills.join(", ") : null],
+    ["Experience", profile.experienceYears == null ? null : `${profile.experienceYears} years`],
+  ] as [string, unknown][]).filter(([, value]) => Boolean(value)) as [string, string | null | undefined][];
+  return (
+    <div className="rounded-lg border bg-card p-3 text-sm">
+      <p className="font-medium">CV information extracted</p>
+      <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+        {fields.map(([label, value]) => <><dt key={`${label}-label`} className="text-muted-foreground">{label}</dt><dd key={`${label}-value`} className="min-w-0">{String(value)}</dd></>)}
+      </dl>
+      {turn.missingFields.length > 0 && (
+        <p className="text-muted-foreground mt-2 text-xs">Missing: {turn.missingFields.join(", ")}.</p>
+      )}
+      {turn.warnings.map((warning) => <p key={warning} className="mt-2 text-xs text-amber-600">{warning}</p>)}
+      <p className="text-muted-foreground mt-2 text-xs">Reply with corrections or “confirm” to continue.</p>
+    </div>
+  );
+}
+
+function CvPreviewCard({ turn }: { turn: Extract<Turn, { role: "cvPreview" }> }) {
+  if (!turn.preview) {
+    return <p className="text-muted-foreground text-sm">Before I create the CV, I still need: {turn.missingFields.join(", ")}.</p>;
+  }
+  const preview = turn.preview;
+  return (
+    <div className="rounded-lg border bg-card p-3 text-sm">
+      <p className="font-medium">{String(preview.fullName ?? "Candidate")} - CV preview</p>
+      <p className="text-muted-foreground mt-1 text-xs">{String(preview.targetRole ?? "")}</p>
+      {preview.summary != null && <p className="mt-2 text-xs">{String(preview.summary)}</p>}
+      {Array.isArray(preview.skills) && preview.skills.length > 0 && (
+        <p className="mt-2 text-xs"><span className="font-medium">Skills:</span> {(preview.skills as string[]).join(", ")}</p>
+      )}
+      {Array.isArray(preview.workExperience) && preview.workExperience.length > 0 && (
+        <p className="mt-1 text-xs"><span className="font-medium">Experience:</span> {preview.workExperience.length} role(s)</p>
+      )}
+      {Array.isArray(preview.projects) && preview.projects.length > 0 && (
+        <p className="mt-1 text-xs"><span className="font-medium">Projects:</span> {preview.projects.length}</p>
+      )}
+      <p className="text-muted-foreground mt-2 text-xs">Reply “approve” to generate the PDF, or tell me what to change.</p>
+    </div>
+  );
+}
+
 function JobMatchCards({
   jobs,
   onJobSelect,
@@ -435,6 +573,9 @@ function JobMatchCards({
           </div>
           <p className="text-muted-foreground mt-2 text-xs">{job.description}</p>
           <p className="mt-2 text-xs">{job.reason}</p>
+          {Array.isArray(job.gaps) && job.gaps.length > 0 && (
+            <p className="text-muted-foreground mt-1 text-xs">Gaps: {job.gaps.join(" · ")}</p>
+          )}
           <div className="mt-2 flex flex-wrap gap-1">
             {job.matchedSkills.map((skill) => (
               <span key={skill} className="rounded bg-muted px-1.5 py-0.5 text-xs">

@@ -13,7 +13,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx scripts/seed-jobs.ts",
-    "test": "tsx --test harness/jobs.test.ts harness/application-state.test.ts",
+    "test": "tsx --test harness/jobs.test.ts harness/application-state.test.ts harness/cv.test.ts",
     "docs": "vitepress dev lessons --port 5174",
     "docs:build": "vitepress build lessons",
     "docs:preview": "vitepress preview lessons --port 4174"
@@ -21,6 +21,8 @@
   "dependencies": {
     "@ai-sdk/openai": "^3.0.70",
     "@dbos-inc/dbos-sdk": "^4.19.8",
+    "@types/multer": "^2.2.0",
+    "@types/pdfkit": "^0.17.6",
     "ai": "^6.0.202",
     "better-auth": "^1.6.23",
     "class-variance-authority": "^0.7.1",
@@ -30,6 +32,9 @@
     "express": "^5.1.0",
     "lucide-react": "^1.17.0",
     "marked": "^18.0.5",
+    "multer": "^2.2.0",
+    "pdfjs-dist": "^6.1.200",
+    "pdfkit": "^0.19.1",
     "postgres": "^3.4.9",
     "radix-ui": "^1.5.0",
     "react": "^19.1.0",
