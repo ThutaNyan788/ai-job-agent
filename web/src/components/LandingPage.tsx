@@ -267,7 +267,7 @@ function HowItWorks() {
         eyebrow="How it works"
         title="Three steps to a relevant shortlist"
       />
-      <ol className="mx-auto mt-12 grid max-w-7xl gap-8 px-5 sm:px-8 md:grid-cols-3">
+      <ol className="mx-auto mt-12 grid max-w-7xl gap-8 px-5 sm:px-8 md:grid-cols-4">
         {steps.map((step, index) => {
           const Icon = step.icon;
           return (
