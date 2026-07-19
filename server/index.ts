@@ -1,11 +1,8 @@
 // MUST be first: loads .dev.vars before any module that reads env at load time.
 import "./env";
 
-import { DBOS } from "@dbos-inc/dbos-sdk";
 import express from "express";
 import multer from "multer";
-import { createServer, type IncomingMessage } from "node:http";
-import { WebSocketServer, type WebSocket } from "ws";
 import { fromNodeHeaders, toNodeHandler } from "better-auth/node";
 import { z } from "zod";
 import { createCipheriv, randomBytes, randomUUID } from "node:crypto";
@@ -20,11 +17,10 @@ import {
   loadCvDocument,
   saveCvUpload,
 } from "../harness/db";
-import { subscribe, history } from "../harness/bus";
+import { history } from "../harness/bus";
 import { runAgentWorkflow } from "../harness/runtime";
-import { runApplicationWorkflow } from "../harness/applications";
+import { requestApplication, decideApplication } from "../harness/applications";
 import { createCompanyJob, findJob, listJobs, listJobsForCompany } from "../harness/jobs";
-import type { ClientMessage } from "@shared/events";
 
 const PORT = Number(process.env.PORT ?? 8787);
 const APP_ORIGIN = process.env.APP_ORIGIN ?? "http://localhost:5173";
@@ -117,16 +113,10 @@ const jobPostInputSchema = z.object({
   }
 });
 
-async function main() {
+export async function createApp() {
   assertAuthConfiguration();
   await ensureSchema();
   await ensureAuthSchema();
-
-  // Point DBOS at the same Postgres for its checkpoint store, then launch it.
-  // launch() ALSO recovers any workflows that were mid-flight when the process
-  // last died, resuming each from its last completed step.
-  DBOS.setConfig({ name: "harness", systemDatabaseUrl: process.env.DATABASE_URL });
-  await DBOS.launch();
 
   const app = express();
   app.use((req, res, next) => {
@@ -308,10 +298,39 @@ async function main() {
     if (!user) return res.sendStatus(401);
     if (!(await ownsApplicationWorkflow(user.id, req.params.workflowId))) return res.sendStatus(404);
     const approved = Boolean(req.body?.approved);
-    await DBOS.send(req.params.workflowId, { approved }, "approval");
-    res.json({ ok: true });
+    const status = await decideApplication(user.id, req.params.workflowId, approved);
+    res.json({ ok: true, status });
   });
 
+  app.get("/api/events", async (req, res) => {
+    const user = await authenticatedUser(req.headers);
+    if (!user) return res.sendStatus(401);
+    const after = Number(req.query.after ?? 0);
+    const events = await history(user.id, Number.isFinite(after) ? after : 0);
+    return res.json({ events, cursor: events.length ? (events[events.length - 1] as typeof events[number] & { seq: number }).seq : after });
+  });
+
+  app.post("/api/tasks", async (req, res) => {
+    const user = await authenticatedUser(req.headers);
+    if (!user) return res.sendStatus(401);
+    const input = typeof req.body?.input === "string" ? req.body.input.trim() : "";
+    if (!input) return res.status(400).json({ error: "Task input is required." });
+    const workflowId = randomUUID();
+    void runAgentWorkflow({ message: input, userId: user.id, attachments: req.body?.attachments, workflowId }).catch((error) => console.error("Task failed:", error));
+    return res.status(202).json({ workflowId });
+  });
+
+  app.post("/api/applications", async (req, res) => {
+    const user = await authenticatedUser(req.headers);
+    if (!user) return res.sendStatus(401);
+    const job = await findJob(String(req.body?.jobId ?? ""));
+    if (!job) return res.sendStatus(404);
+    const application = await requestApplication({ userId: user.id, job });
+    return res.status(202).json({ application });
+  });
+
+  return app;
+  /*
   const server = createServer(app);
   const wss = new WebSocketServer({ noServer: true });
   const socketUsers = new WeakMap<WebSocket, string>();
@@ -384,13 +403,12 @@ async function main() {
     // Replay the durable timeline (including a workflow DBOS is recovering).
     for (const event of await history(user.id)) socket.send(JSON.stringify(event));
   });
-
   server.listen(PORT, () => {
     console.log(`harness server listening on http://localhost:${PORT}  (ws: /ws)`);
-  });
+  });*/
 }
 
-main().catch((error) => {
+/*main().catch((error) => {
   console.error("failed to start:", error);
   process.exit(1);
-});
+});*/

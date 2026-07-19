@@ -41,7 +41,7 @@ export async function emit(input: EventInput, userId?: string): Promise<void> {
 }
 
 // The full timeline so far, in order — read back from Postgres on every connect.
-export async function history(userId: string): Promise<AgentEvent[]> {
+export async function history(userId: string, after = 0): Promise<AgentEvent[]> {
   const rows = await db.select().from(eventLog).orderBy(eventLog.seq);
-  return rows.map((row) => row.data).filter((event) => event.userId === userId);
+  return rows.filter((row) => row.seq > after).map((row) => ({ ...row.data, seq: row.seq })).filter((event) => event.userId === userId);
 }

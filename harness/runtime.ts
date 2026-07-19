@@ -1,6 +1,6 @@
-import { DBOS } from "@dbos-inc/dbos-sdk";
 import { streamText } from "ai";
 import type { JSONValue, ModelMessage } from "ai";
+import { randomUUID } from "node:crypto";
 import { EventType, type JobMatch } from "@shared/events";
 import { emit, emitTransient } from "./bus";
 import { jobSeekerAgent } from "./agents";
@@ -21,6 +21,7 @@ type Turn = { text: string; toolCalls: ToolCall[]; responseMessages: ModelMessag
 export type JobWorkflowInput = {
   message: string;
   userId: string;
+  workflowId?: string;
   attachments?: { id: string; kind: "cv_pdf"; name: string }[];
 };
 
@@ -121,14 +122,11 @@ function toolResultMessage(call: ToolCall, value: JSONValue): ModelMessage {
 }
 
 async function agentWorkflow(input: JobWorkflowInput): Promise<string> {
-  const workflowId = DBOS.workflowID ?? "unknown";
-  await DBOS.runStep(
-    () => emit({ type: EventType.WorkflowStarted, workflowId, input: input.message }, input.userId),
-    { name: "started" },
-  );
+  const workflowId = input.workflowId ?? randomUUID();
+  await emit({ type: EventType.WorkflowStarted, workflowId, input: input.message }, input.userId);
 
-  let profile = await DBOS.runStep(() => getCandidateProfile(input.userId), { name: "load-profile" });
-  let pendingPreview = await DBOS.runStep(() => getLatestCvPreview(input.userId), { name: "load-cv-preview" });
+  let profile = await getCandidateProfile(input.userId);
+  let pendingPreview = await getLatestCvPreview(input.userId);
   const turns: ModelMessage[][] = [];
   let summary = "";
 
@@ -140,9 +138,8 @@ async function agentWorkflow(input: JobWorkflowInput): Promise<string> {
         if (oldest) old.push(oldest);
       }
       if (old.length > 0) {
-        summary = await DBOS.runStep(() => summarize(old, summary), { name: `summarize-${step}` });
-        await DBOS.runStep(
-          () => emit({
+        summary = await summarize(old, summary);
+        await emit({
             type: EventType.MemoryCompacted,
             workflowId,
             summarizedTurns: old.length,
@@ -155,9 +152,7 @@ async function agentWorkflow(input: JobWorkflowInput): Promise<string> {
               ),
             ),
             summary,
-          }, input.userId),
-          { name: `compacted-${step}` },
-        );
+          }, input.userId);
       }
     }
 
@@ -170,23 +165,17 @@ async function agentWorkflow(input: JobWorkflowInput): Promise<string> {
       summary,
       turns,
     );
-    const turn = await DBOS.runStep(() => modelTurn(workflowId, input.userId, context), { name: `model-${step}` });
+    const turn = await modelTurn(workflowId, input.userId, context);
     const turnMessages: ModelMessage[] = [...turn.responseMessages];
 
     if (turn.toolCalls.length === 0) {
-      await DBOS.runStep(() => emit({ type: EventType.ModelCompleted, workflowId, text: turn.text }, input.userId), {
-        name: `model-done-${step}`,
-      });
-      await DBOS.runStep(() => emit({ type: EventType.WorkflowCompleted, workflowId, output: turn.text }, input.userId), {
-        name: "completed",
-      });
+      await emit({ type: EventType.ModelCompleted, workflowId, text: turn.text }, input.userId);
+      await emit({ type: EventType.WorkflowCompleted, workflowId, output: turn.text }, input.userId);
       return turn.text;
     }
 
     for (const call of turn.toolCalls) {
-      const output = await DBOS.runStep(() => toolStep(workflowId, input.userId, call), {
-        name: `tool-${call.toolCallId}`,
-      });
+      const output = await toolStep(workflowId, input.userId, call);
       if ((call.toolName === "updateCandidateProfile" || call.toolName === "confirmCandidateProfile" || call.toolName === "extractUploadedCv") && output.profile) {
         profile = output.profile as typeof profile;
       }
@@ -198,11 +187,8 @@ async function agentWorkflow(input: JobWorkflowInput): Promise<string> {
     turns.push(turnMessages);
   }
 
-  await DBOS.runStep(
-    () => emit({ type: EventType.WorkflowFailed, workflowId, error: `Hit the ${MAX_STEPS}-step limit without finishing.` }, input.userId),
-    { name: "failed" },
-  );
+  await emit({ type: EventType.WorkflowFailed, workflowId, error: `Hit the ${MAX_STEPS}-step limit without finishing.` }, input.userId);
   return "";
 }
 
-export const runAgentWorkflow = DBOS.registerWorkflow(agentWorkflow, { name: "jobAgentWorkflow" });
+export const runAgentWorkflow = agentWorkflow;

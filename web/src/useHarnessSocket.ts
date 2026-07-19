@@ -2,50 +2,51 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentEvent, ClientMessage } from "@shared/events";
 import { AUTH_BASE_URL } from "./auth-client";
 
-// The inspector's single source of truth: the harness event stream, received
-// over one WebSocket. We also send commands (submit_task, ...) back over it.
-const WS_URL = `${AUTH_BASE_URL.replace(/^http/, "ws")}/ws`;
-
 export function useHarnessSocket() {
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const socketRef = useRef<WebSocket | null>(null);
+  const cursorRef = useRef(0);
+  const stopped = useRef(false);
 
   useEffect(() => {
-    const socket = new WebSocket(WS_URL);
-    socketRef.current = socket;
-
-    socket.onopen = () => {
-      setConnected(true);
-      setError(null);
-    };
-    socket.onerror = () => {
-      setError("Cannot reach the harness server.");
-    };
-    socket.onclose = () => {
-      setConnected(false);
-    };
-    socket.onmessage = (e) => {
+    stopped.current = false;
+    let delay = 1000;
+    const poll = async () => {
+      if (stopped.current) return;
       try {
-        const event = JSON.parse(e.data) as AgentEvent;
-        setEvents((prev) => [...prev, event]);
+        const response = await fetch(`${AUTH_BASE_URL}/api/events?after=${cursorRef.current}`, { credentials: "include" });
+        if (!response.ok) throw new Error(`events (${response.status})`);
+        const payload = await response.json() as { events: (AgentEvent & { seq?: number })[]; cursor?: number };
+        if (payload.events.length) {
+          setEvents((prev) => [...prev, ...payload.events.filter((event) => !prev.some((item) => item.id === event.id))]);
+          cursorRef.current = payload.cursor ?? payload.events.at(-1)?.seq ?? cursorRef.current;
+        }
+        setConnected(true);
+        setError(null);
+        delay = 1000;
       } catch {
-        setError("Received an invalid event from the harness server.");
+        setConnected(false);
+        setError("Cannot reach the harness server.");
+        delay = Math.min(delay * 2, 15_000);
       }
+      if (!stopped.current) window.setTimeout(poll, delay);
     };
-
-    return () => socket.close();
+    void poll();
+    return () => { stopped.current = true; };
   }, []);
 
   const send = useCallback((message: ClientMessage) => {
-    if (socketRef.current?.readyState !== WebSocket.OPEN) {
-      setError("The harness server is not connected.");
-      return false;
-    }
-
-    socketRef.current.send(JSON.stringify(message));
-    setError(null);
+    const endpoint = message.type === "submit_task" ? "/api/tasks" : "/api/applications";
+    const body = message.type === "submit_task"
+      ? { input: message.input, attachments: message.attachments }
+      : { jobId: message.jobId };
+    void fetch(`${AUTH_BASE_URL}${endpoint}`, {
+      method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }).then((response) => {
+      if (!response.ok) throw new Error(`request (${response.status})`);
+      setError(null);
+    }).catch(() => setError("The harness server is not connected."));
     return true;
   }, []);
 

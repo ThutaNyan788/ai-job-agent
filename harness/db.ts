@@ -421,15 +421,18 @@ export async function ensureApplication(
 
 export async function resolveApplication(
   userId: string,
-  jobId: string,
   workflowId: string,
   status: Extract<ApplicationStatus, "submitted" | "cancelled">,
 ): Promise<ApplicationRecord> {
   await client`
     UPDATE applications SET status = ${status}
-    WHERE user_id = ${userId} AND job_id = ${jobId} AND workflow_id = ${workflowId}
+    WHERE user_id = ${userId} AND workflow_id = ${workflowId}
   `;
-  return ensureApplication(userId, jobId, workflowId);
+  const rows = await client<{ job_id: string }[]>`
+    SELECT job_id FROM applications WHERE user_id = ${userId} AND workflow_id = ${workflowId} LIMIT 1
+  `;
+  if (!rows[0]) throw new Error("Application not found.");
+  return ensureApplication(userId, rows[0].job_id, workflowId);
 }
 
 export async function ownsApplicationWorkflow(userId: string, workflowId: string): Promise<boolean> {

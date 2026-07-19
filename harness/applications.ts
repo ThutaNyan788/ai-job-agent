@@ -1,72 +1,40 @@
-import { DBOS } from "@dbos-inc/dbos-sdk";
-import type { JobPost } from "@shared/events";
-import { EventType, type ApplicationStatus } from "@shared/events";
-import { emit } from "./bus";
+import { randomUUID } from "node:crypto";
+import type { JobPost, ApplicationStatus } from "@shared/events";
+import { EventType } from "@shared/events";
+import { emit, history } from "./bus";
 import { ensureApplication, resolveApplication } from "./db";
-import { needsApplicationApproval } from "./application-state";
 
-const APPROVAL_TIMEOUT_S = 86_400;
+export type ApplicationWorkflowInput = { userId: string; job: JobPost; workflowId?: string };
 
-export type ApplicationWorkflowInput = {
-  userId: string;
-  job: JobPost;
-};
-
-async function emitStatus(
-  workflowId: string,
-  userId: string,
-  jobId: string,
-  status: ApplicationStatus,
-): Promise<void> {
-  await emit({ type: EventType.ApplicationStatus, workflowId, userId, jobId, status }, userId);
-}
-
-async function applicationWorkflow(input: ApplicationWorkflowInput): Promise<ApplicationStatus> {
-  const workflowId = DBOS.workflowID ?? "unknown";
-  const application = await DBOS.runStep(
-    () => ensureApplication(input.userId, input.job.id, workflowId),
-    { name: "ensure-application" },
-  );
-  await DBOS.runStep(
-    () => emitStatus(application.workflowId, input.userId, input.job.id, application.status),
-    { name: "application-pending" },
-  );
-
-  if (!needsApplicationApproval(application, workflowId)) return application.status;
-
-  const toolCallId = `application-${input.job.id}`;
-  await DBOS.runStep(
-    () => emit({
+/** Creates the pending application and emits its approval request. Safe to retry. */
+export async function requestApplication(input: ApplicationWorkflowInput) {
+  const workflowId = input.workflowId ?? randomUUID();
+  const application = await ensureApplication(input.userId, input.job.id, workflowId);
+  await emit({ type: EventType.ApplicationStatus, workflowId: application.workflowId, userId: input.userId, jobId: input.job.id, status: application.status }, input.userId);
+  const alreadyRequested = (await history(input.userId)).some((event) =>
+    event.type === EventType.ApprovalRequested && event.workflowId === application.workflowId);
+  if (application.status === "pending" && !alreadyRequested) {
+    await emit({
       type: EventType.ApprovalRequested,
-      workflowId,
-      toolCallId,
+      workflowId: application.workflowId,
+      toolCallId: `application-${input.job.id}`,
       action: "submitApplication",
       args: { jobId: input.job.id, title: input.job.title, company: input.job.company.name },
-    }, input.userId),
-    { name: "approval-requested" },
-  );
-
-  const decision = await DBOS.recv<{ approved: boolean }>("approval", APPROVAL_TIMEOUT_S);
-  const approved = decision?.approved ?? false;
-  await DBOS.runStep(
-    () => emit({ type: EventType.ApprovalResolved, workflowId, toolCallId, approved }, input.userId),
-    { name: "approval-resolved" },
-  );
-
-  const status: Extract<ApplicationStatus, "submitted" | "cancelled"> = approved
-    ? "submitted"
-    : "cancelled";
-  const resolved = await DBOS.runStep(
-    () => resolveApplication(input.userId, input.job.id, workflowId, status),
-    { name: "resolve-application" },
-  );
-  await DBOS.runStep(
-    () => emitStatus(workflowId, input.userId, input.job.id, resolved.status),
-    { name: "application-resolved" },
-  );
-  return resolved.status;
+    }, input.userId);
+  }
+  return application;
 }
 
-export const runApplicationWorkflow = DBOS.registerWorkflow(applicationWorkflow, {
-  name: "mockApplicationWorkflow",
-});
+export async function decideApplication(userId: string, workflowId: string, approved: boolean): Promise<ApplicationStatus> {
+  const status: "submitted" | "cancelled" = approved ? "submitted" : "cancelled";
+  const prior = await history(userId);
+  const priorStatus = prior.findLast((event) =>
+    event.type === EventType.ApplicationStatus && event.workflowId === workflowId);
+  if (priorStatus?.type === EventType.ApplicationStatus && priorStatus.status !== "pending") return priorStatus.status;
+  const application = await resolveApplication(userId, workflowId, status);
+  await emit({ type: EventType.ApprovalResolved, workflowId, toolCallId: `application-${application.jobId}`, approved }, userId);
+  await emit({ type: EventType.ApplicationStatus, workflowId, userId, jobId: application.jobId, status: application.status }, userId);
+  return application.status;
+}
+
+export const runApplicationWorkflow = requestApplication;

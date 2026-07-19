@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently -n server,web -c blue,magenta \"npm:dev:server\" \"npm:dev:web\"",
-    "dev:server": "tsx watch server/index.ts",
+    "dev:server": "tsx watch server/dev.ts",
     "dev:web": "vite",
     "build": "vite build",
     "preview": "vite preview",
@@ -20,7 +20,6 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.70",
-    "@dbos-inc/dbos-sdk": "^4.19.8",
     "@types/multer": "^2.2.0",
     "@types/nodemailer": "^8.0.1",
     "@types/pdfkit": "^0.17.6",
@@ -48,7 +47,6 @@
     "shiki": "^4.2.0",
     "tailwind-merge": "^3.6.0",
     "use-stick-to-bottom": "^1.1.6",
-    "ws": "^8.18.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
@@ -58,7 +56,6 @@
     "@types/node": "^24.0.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
-    "@types/ws": "^8.5.0",
     "@vitejs/plugin-react": "^4.3.0",
     "concurrently": "^9.1.0",
     "drizzle-kit": "^0.31.10",
