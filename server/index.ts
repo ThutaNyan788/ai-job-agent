@@ -8,6 +8,8 @@ import { createServer, type IncomingMessage } from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
 import { fromNodeHeaders, toNodeHandler } from "better-auth/node";
 import { z } from "zod";
+import { createCipheriv, randomBytes, randomUUID } from "node:crypto";
+import nodemailer from "nodemailer";
 import { assertAuthConfiguration, auth } from "./auth";
 import {
   ensureSchema,
@@ -26,6 +28,47 @@ import type { ClientMessage } from "@shared/events";
 
 const PORT = Number(process.env.PORT ?? 8787);
 const APP_ORIGIN = process.env.APP_ORIGIN ?? "http://localhost:5173";
+const INTERVIEW_RECIPIENT = process.env.INTERVIEW_INVITATION_RECIPIENT ?? "thutanyan788@gmail.com";
+const LOCAL_ORIGINS = new Set([APP_ORIGIN, "http://localhost:5173", "http://localhost:5174", "http://localhost:5175"]);
+
+const scheduleInterviewSchema = z.object({
+  candidateName: z.string().trim().min(1).max(160),
+  jobTitle: z.string().trim().min(1).max(160),
+  date: z.string().trim().min(1).max(40),
+  time: z.string().trim().min(1).max(40),
+  platform: z.string().trim().min(1).max(80),
+  subject: z.string().trim().min(1).max(200),
+  message: z.string().trim().min(1).max(20_000),
+});
+
+function requireZegoConfig() {
+  const appId = Number(process.env.ZEGO_APP_ID);
+  const serverSecret = process.env.ZEGO_SERVER_SECRET;
+  if (!Number.isSafeInteger(appId) || appId <= 0 || !serverSecret) {
+    throw new Error("Zego Cloud is not configured. Set ZEGO_APP_ID and ZEGO_SERVER_SECRET.");
+  }
+  return { appId, serverSecret };
+}
+
+function escapeHtml(value: string) {
+  return value.replace(/[&<>\"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character);
+}
+
+function generateZegoTestToken(appId: number, serverSecret: string, roomId: string, userId: string, userName: string, expireSeconds = 3600) {
+  const now = Math.floor(Date.now() / 1000);
+  const payload = JSON.stringify({ app_id: appId, user_id: userId, nonce: Math.floor(Math.random() * 0x7fffffff), ctime: now, expire: now + expireSeconds });
+  const key = Buffer.from(serverSecret, "utf8");
+  if (![16, 24, 32].includes(key.length)) throw new Error("ZEGO_SERVER_SECRET must be 16, 24, or 32 UTF-8 bytes.");
+  const iv = randomBytes(16);
+  const cipher = createCipheriv(`aes-${key.length * 8}-cbc`, key, iv);
+  const encrypted = Buffer.concat([cipher.update(payload, "utf8"), cipher.final()]);
+  const header = Buffer.alloc(28);
+  header.writeUInt32BE(now + expireSeconds, 4);
+  header.writeUInt16BE(iv.length, 8);
+  iv.copy(header, 10);
+  header.writeUInt16BE(encrypted.length, 26);
+  return `04${Buffer.concat([header, encrypted]).toString("base64")}#${Buffer.from(JSON.stringify({ userID: userId, roomID: roomId, userName: encodeURIComponent(userName), appID: appId })).toString("base64")}`;
+}
 
 async function authenticatedUser(headers: Parameters<typeof fromNodeHeaders>[0]) {
   const session = await auth.api.getSession({ headers: fromNodeHeaders(headers) });
@@ -87,8 +130,8 @@ async function main() {
 
   const app = express();
   app.use((req, res, next) => {
-    if (req.headers.origin === APP_ORIGIN) {
-      res.setHeader("Access-Control-Allow-Origin", APP_ORIGIN);
+    if (typeof req.headers.origin === "string" && LOCAL_ORIGINS.has(req.headers.origin)) {
+      res.setHeader("Access-Control-Allow-Origin", req.headers.origin);
       res.setHeader("Access-Control-Allow-Credentials", "true");
     }
     res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -197,6 +240,56 @@ async function main() {
     }
     const job = await createCompanyJob(user.id, parsed.data);
     res.status(201).json({ job });
+  });
+
+  app.post("/api/interviews/schedule", async (req, res) => {
+    try {
+      const user = await authenticatedUser(req.headers);
+      if (!user) return res.sendStatus(401);
+      if (user.role !== "company") return res.status(403).json({ error: "A company account is required." });
+      const parsed = scheduleInterviewSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid interview details." });
+
+      requireZegoConfig();
+      const roomId = `nexora-${randomUUID()}`;
+      const videoCallLink = `${APP_ORIGIN}/interview-room/${encodeURIComponent(roomId)}`;
+      const text = `${parsed.data.message}\n\nJoin the video interview: ${videoCallLink}`;
+      const html = `<p>${escapeHtml(parsed.data.message).replace(/\n/g, "<br />")}</p><p><strong>Join the video interview:</strong> <a href="${escapeHtml(videoCallLink)}">${escapeHtml(videoCallLink)}</a></p>`;
+      const smtpHost = process.env.SMTP_HOST;
+      const smtpPort = Number(process.env.SMTP_PORT ?? 587);
+      const smtpSecure = process.env.SMTP_SECURE === "true";
+      const smtpUser = process.env.SMTP_USER;
+      const smtpPassword = process.env.SMTP_PASSWORD;
+      const from = process.env.EMAIL_FROM ?? smtpUser;
+      if (!smtpHost || !smtpUser || !smtpPassword || !from || !Number.isInteger(smtpPort)) {
+        return res.status(500).json({ error: "Email is not configured. Check SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, and EMAIL_FROM." });
+      }
+      const transporter = nodemailer.createTransport({ host: smtpHost, port: smtpPort, secure: smtpSecure, auth: { user: smtpUser, pass: smtpPassword } });
+      await transporter.sendMail({ from, to: INTERVIEW_RECIPIENT, subject: parsed.data.subject, text, html });
+      return res.status(201).json({ ok: true, recipient: INTERVIEW_RECIPIENT, videoCallLink });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown scheduling error.";
+      console.error("Interview scheduling failed:", message);
+      const isConfigurationError = message.startsWith("Zego Cloud is not configured") || message.startsWith("ZEGO_SERVER_SECRET");
+      return res.status(isConfigurationError ? 500 : 502).json({ error: isConfigurationError ? message : `The invitation email could not be sent: ${message}` });
+    }
+  });
+
+  app.get("/api/interviews/:roomId/token", async (req, res) => {
+    try {
+      const roomId = req.params.roomId.trim();
+      if (!/^nexora-[0-9a-f-]{36}$/.test(roomId)) return res.status(400).json({ error: "Invalid interview room." });
+      const { appId, serverSecret } = requireZegoConfig();
+      const userId = `guest-${randomUUID()}`;
+      const userName = typeof req.query.name === "string" && req.query.name.trim() ? req.query.name.trim().slice(0, 80) : "Interview guest";
+      // This test-token helper is intended for development. Use a backend Zego
+      // token service with generateKitTokenForProduction before deploying publicly.
+      const token = generateZegoTestToken(appId, serverSecret, roomId, userId, userName);
+      return res.json({ token, appId, roomId, userId, userName });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to create a Zego token.";
+      return res.status(500).json({ error: message });
+    }
   });
 
   // Clear the durable log. The inspector calls this, then reloads.

@@ -16,3 +16,14 @@ BETTER_AUTH_URL=http://localhost:8787
 BETTER_AUTH_SECRET=replace-with-a-long-random-secret
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
+
+# Interview scheduling (Zego server secret must remain server-side).
+ZEGO_APP_ID=123456789
+ZEGO_SERVER_SECRET=replace-with-your-zego-server-secret
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your-email@gmail.com
+SMTP_PASSWORD=your-gmail-app-password
+EMAIL_FROM=TalentAI <your-email@gmail.com>
+INTERVIEW_INVITATION_RECIPIENT=thutanyan788@gmail.com

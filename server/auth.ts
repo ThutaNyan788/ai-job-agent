@@ -6,6 +6,7 @@ import * as schema from "../harness/auth-schema";
 
 const baseURL = process.env.BETTER_AUTH_URL ?? "http://localhost:8787";
 const appOrigin = process.env.APP_ORIGIN ?? "http://localhost:5173";
+const trustedOrigins = [appOrigin, "http://localhost:5173", "http://localhost:5174", "http://localhost:5175"];
 
 const requiredAuthEnvironment = [
   "BETTER_AUTH_SECRET",
@@ -35,7 +36,7 @@ export const auth = betterAuth({
   database: drizzleAdapter(db, { provider: "pg", schema }),
   baseURL,
   secret: process.env.BETTER_AUTH_SECRET,
-  trustedOrigins: [appOrigin],
+  trustedOrigins,
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: false,

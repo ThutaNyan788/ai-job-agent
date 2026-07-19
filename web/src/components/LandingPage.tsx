@@ -232,7 +232,7 @@ function Hero() {
           <img
             className="relative z-10 max-h-[570px] w-auto max-w-full object-contain drop-shadow-2xl"
             src={heroImage}
-            alt="TalentAI assistant ready to help with a job search"
+            alt="NEXORA assistant ready to help with a job search"
           />
         </div>
       </div>
@@ -363,7 +363,7 @@ function Brand() {
     <a
       href="#top"
       className="flex items-center gap-2.5"
-      aria-label="TalentAI home"
+      aria-label="NEXORA home"
     >
       <span className="grid size-9 place-items-center overflow-hidden rounded-md bg-pink-50">
         <img
@@ -373,7 +373,7 @@ function Brand() {
         />
       </span>
       <span className="text-lg font-extrabold">
-        Talent<span className="text-pink-600">AI</span>
+        NEX<span className="text-pink-600">ORA</span>
       </span>
     </a>
   );
@@ -385,7 +385,7 @@ function Footer() {
       <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-5 px-5 py-8 sm:px-8 md:flex-row">
         <Brand />
         <p className="text-sm text-slate-500">
-          &copy; {new Date().getFullYear()} TalentAI. Fictional job matching for
+          &copy; {new Date().getFullYear()} NEXORA. Fictional job matching for
           this workshop.
         </p>
       </div>

@@ -16,13 +16,18 @@ export function LoginPage() {
     event.preventDefault();
     setBusy(true);
     setError(null);
-    const result = await authClient.signIn.email({ email, password, rememberMe });
-    setBusy(false);
-    if (result.error) {
-      setError(result.error.message ?? "Could not sign in. Check your email and password.");
-      return;
+    try {
+      const result = await authClient.signIn.email({ email, password, rememberMe });
+      if (result.error) {
+        setError(result.error.message ?? "Could not sign in. Check your email and password.");
+        return;
+      }
+      navigate("/");
+    } catch {
+      setError("The authentication server is unavailable. Make sure the backend is running on port 8787.");
+    } finally {
+      setBusy(false);
     }
-    navigate("/");
   }
 
   async function signInWithGoogle() {
@@ -58,7 +63,7 @@ export function LoginPage() {
       </form>
       <Divider text="or" />
       <GoogleButton busy={busy} onClick={() => void signInWithGoogle()} label="Continue with Google" />
-      <p className="mt-6 text-center text-sm text-slate-500">New to TalentAI?{" "}<a className="font-bold text-pink-700 hover:underline" href="/register" onClick={handleInternalLink}>Create an account</a></p>
+      <p className="mt-6 text-center text-sm text-slate-500">New to NEXORA?{" "}<a className="font-bold text-pink-700 hover:underline" href="/register" onClick={handleInternalLink}>Create an account</a></p>
     </AuthPageShell>
   );
 }

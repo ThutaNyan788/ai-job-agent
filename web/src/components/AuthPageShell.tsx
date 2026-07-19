@@ -25,7 +25,7 @@ export function AuthPageShell({
           </a>
           <div className="relative flex min-h-0 flex-1 items-center justify-center">
             <div className="absolute size-72 rounded-full bg-white/60" aria-hidden="true" />
-            <img className="relative z-10 max-h-[390px] w-auto max-w-full object-contain drop-shadow-xl" src={heroImage} alt="TalentAI job assistant" />
+            <img className="relative z-10 max-h-[390px] w-auto max-w-full object-contain drop-shadow-xl" src={heroImage} alt="NEXORA job assistant" />
           </div>
           <div className="relative z-10 text-center text-pink-950">
             <h2 className="text-2xl font-bold">{artworkTitle}</h2>
@@ -36,7 +36,7 @@ export function AuthPageShell({
           <div className="w-full max-w-sm">
             <a href="/" onClick={handleInternalLink} className="mb-9 flex items-center gap-2.5 md:pointer-events-none">
               <span className="grid size-10 place-items-center rounded-md bg-pink-600 text-lg font-extrabold text-white">T</span>
-              <span className="text-xl font-extrabold text-slate-950">Talent<span className="text-pink-600">AI</span></span>
+              <span className="text-xl font-extrabold text-slate-950">NEX<span className="text-pink-600">ORA</span></span>
             </a>
             <h1 className="text-3xl font-bold text-slate-950">{title}</h1>
             <p className="mt-2 text-sm text-slate-500">{subtitle}</p>

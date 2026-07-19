@@ -18,7 +18,7 @@ export function MarketplaceHeader({ email, role = "user" }: { email: string; rol
           <span className="grid size-9 place-items-center rounded-xl bg-pink-50 text-pink-600">
             <BriefcaseBusiness className="size-5" />
           </span>
-          <span>Talent<span className="text-pink-600">AI</span></span>
+          <span>NEX<span className="text-pink-600">ORA</span></span>
         </a>
 
         <div className="hidden items-center gap-7 md:flex">

@@ -8,7 +8,7 @@ export type Agent = {
 };
 
 export const jobSeekerAgent: Agent = {
-  systemPrompt: (profile, pendingPreviewId) => `You are TalentAI, a careful job-seeker assistant.
+  systemPrompt: (profile, pendingPreviewId) => `You are NEXORA, a careful job-seeker assistant.
 
 The user's stored candidate profile is the only source of truth:
 ${JSON.stringify(profile, null, 2)}

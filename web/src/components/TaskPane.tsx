@@ -273,7 +273,7 @@ export function TaskPane({
 
   async function clearMemory() {
     // The route is wired up in the memory lesson; degrade gracefully before then.
-    await fetch(`http://${location.hostname}:8787/api/clear`, {
+    await fetch(`${AUTH_BASE_URL}/api/clear`, {
       method: "POST",
       credentials: "include",
     }).catch(() => {});

@@ -5,6 +5,7 @@ import { apiFetch } from "@/api";
 import { handleInternalLink } from "@/navigation";
 import { MarketplaceHeader } from "./MarketplaceHeader";
 import { formatSalary, titleCase, workTypeLabel } from "./JobListPage";
+import { rememberSelectedCompanyJob } from "./InterviewerList";
 
 export function CompanyJobsPage({ email }: { email: string }) {
   const [jobs, setJobs] = useState<JobPost[]>([]);
@@ -44,7 +45,16 @@ export function CompanyJobsPage({ email }: { email: string }) {
         )}
         <div className="mt-8 grid gap-5 lg:grid-cols-2">
           {jobs.map((job) => (
-            <article key={job.id} className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
+            <a
+              key={job.id}
+              href="/interviewerList"
+              onClick={(event) => {
+                rememberSelectedCompanyJob(job.title);
+                handleInternalLink(event);
+              }}
+              className="group block rounded-2xl focus:outline-none focus:ring-4 focus:ring-pink-100"
+            >
+            <article className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm transition group-hover:-translate-y-0.5 group-hover:border-pink-200 group-hover:shadow-lg">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-sm font-semibold text-pink-600">{job.company.name}</p>
@@ -60,6 +70,7 @@ export function CompanyJobsPage({ email }: { email: string }) {
                 <span className="inline-flex items-center gap-1.5"><CalendarDays className="size-3.5" /> {new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(new Date(job.postedAt))}</span>
               </div>
             </article>
+            </a>
           ))}
         </div>
       </main>

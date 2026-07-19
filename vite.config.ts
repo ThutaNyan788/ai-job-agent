@@ -17,6 +17,17 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    strictPort: true,
+    proxy: {
+      "/api": {
+        target: "http://127.0.0.1:8787",
+        changeOrigin: false,
+      },
+      "/ws": {
+        target: "ws://127.0.0.1:8787",
+        ws: true,
+      },
+    },
     // allow importing files from outside web/ (i.e. shared/)
     fs: { allow: [fileURLToPath(new URL(".", import.meta.url))] },
   },

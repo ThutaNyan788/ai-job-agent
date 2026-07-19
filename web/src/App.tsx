@@ -16,7 +16,9 @@ import { JobListPage } from "./components/JobListPage";
 import { JobDetailsPage } from "./components/JobDetailsPage";
 import { CompanyJobsPage } from "./components/CompanyJobsPage";
 import { JobPostingForm } from "./components/JobPostingForm";
-import { authClient } from "./auth-client";
+import { InterviewerList } from "./components/InterviewerList";
+import { InterviewRoomPage } from "./components/InterviewRoomPage";
+import { AUTH_BASE_URL, authClient } from "./auth-client";
 import { interviewUrlForTitle } from "./interview";
 import { navigate, usePathname } from "./navigation";
 
@@ -24,8 +26,11 @@ export function App() {
   const { data: session, isPending } = authClient.useSession();
   const pathname = usePathname();
 
+  const roomMatch = pathname.match(/^\/interview-room\/([^/]+)$/);
+  if (roomMatch) return <InterviewRoomPage roomId={decodeURIComponent(roomMatch[1])} />;
+
   if (isPending) {
-    return <main className="flex min-h-screen items-center justify-center bg-white text-sm text-slate-500">Loading TalentAI...</main>;
+    return <main className="flex min-h-screen items-center justify-center bg-white text-sm text-slate-500">Loading NEXORA...</main>;
   }
   if (!session) {
     if (pathname === "/login") return <LoginPage />;
@@ -89,7 +94,7 @@ function AuthenticatedApp({ userId, email, role, pathname }: { userId: string; e
   }
 
   async function decideApplication(workflowId: string, approved: boolean, jobTitle: string) {
-    const response = await fetch(`http://${location.hostname}:8787/api/approve/${workflowId}`, {
+    const response = await fetch(`${AUTH_BASE_URL}/api/approve/${workflowId}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
@@ -122,6 +127,9 @@ function AuthenticatedApp({ userId, email, role, pathname }: { userId: string; e
   if (pathname === "/company/jobs") {
     return role === "company" ? <CompanyJobsPage email={email} /> : <JobListPage email={email} role={role} />;
   }
+  if (pathname === "/interviewerList") {
+    return role === "company" ? <InterviewerList email={email} /> : <JobListPage email={email} role={role} />;
+  }
   if (pathname === "/" || pathname === "/jobs") {
     return role === "company" && pathname === "/" ? <CompanyJobsPage email={email} /> : <JobListPage email={email} role={role} />;
   }
@@ -134,7 +142,7 @@ function AuthenticatedApp({ userId, email, role, pathname }: { userId: string; e
       <div className="flex h-full flex-col">
         <header className="flex items-center justify-between border-b px-4 py-2">
           <span className="text-sm font-semibold tracking-tight">
-            Talent<span className="text-pink-600">AI</span>
+            NEX<span className="text-pink-600">ORA</span>
           </span>
           <div className="flex items-center gap-3">
             <span
