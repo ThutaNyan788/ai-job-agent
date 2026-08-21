@@ -58,7 +58,7 @@ export function LoginPage() {
       </form>
       <Divider text="or" />
       <GoogleButton busy={busy} onClick={() => void signInWithGoogle()} label="Continue with Google" />
-      <p className="mt-6 text-center text-sm text-slate-500">New to TalentAI?{" "}<a className="font-bold text-pink-700 hover:underline" href="/register" onClick={handleInternalLink}>Create an account</a></p>
+      <p className="mt-6 text-center text-sm text-slate-500">New to PhayShin?{" "}<a className="font-bold text-pink-700 hover:underline" href="/register" onClick={handleInternalLink}>Create an account</a></p>
     </AuthPageShell>
   );
 }

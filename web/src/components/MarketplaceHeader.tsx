@@ -2,6 +2,7 @@ import { useState } from "react";
 import { BriefcaseBusiness, CirclePlus, LayoutDashboard, LogOut, Menu, MessageSquareText, X } from "lucide-react";
 import { authClient } from "@/auth-client";
 import { handleInternalLink, navigate } from "@/navigation";
+import Logo from "@/assets/logo.png";
 
 export function MarketplaceHeader({ email, role = "user" }: { email: string; role?: "user" | "company" }) {
   const [open, setOpen] = useState(false);
@@ -14,12 +15,17 @@ export function MarketplaceHeader({ email, role = "user" }: { email: string; rol
   return (
     <header className="sticky top-0 z-50 border-b border-slate-100 bg-white/90 backdrop-blur-xl">
       <nav className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8" aria-label="Primary navigation">
-        <a href="/jobs" onClick={handleInternalLink} className="flex items-center gap-2.5 font-extrabold text-slate-950">
-          <span className="grid size-9 place-items-center rounded-xl bg-pink-50 text-pink-600">
-            <BriefcaseBusiness className="size-5" />
-          </span>
-          <span>Talent<span className="text-pink-600">AI</span></span>
-        </a>
+        <a
+      href="#top"
+      className="inline-flex items-center group transition-transform hover:scale-105"
+      aria-label="PhayShin home"
+    >
+      <img
+        className="h-12 w-auto object-contain rounded-md"
+        src={Logo}
+        alt="PhayShin Logo"
+      />
+    </a>
 
         <div className="hidden items-center gap-7 md:flex">
           <a href="/jobs" onClick={handleInternalLink} className="text-sm font-semibold text-slate-700 hover:text-pink-600">Explore jobs</a>
