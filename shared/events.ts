@@ -28,6 +28,10 @@ export enum EventType {
   CvPreviewReady = "cv.preview-ready",
   CvGenerated = "cv.generated",
   ApplicationStatus = "application.status",
+  // a company scheduled a live interview for one of their job's applicants
+  InterviewScheduled = "interview.scheduled",
+  // progress of the invitation email, which is sent by a background workflow
+  InterviewInvite = "interview.invite",
   // memory: old turns compacted into a running summary
   MemoryCompacted = "memory.compacted",
   // orchestration: control handed from one agent to another
@@ -99,13 +103,38 @@ export type JobMatch = JobPost & {
   gaps: string[];
 };
 
-export type ApplicationStatus = "pending" | "submitted" | "cancelled";
+// "submitted" is the candidate confirming their own application; "accepted" is
+// the company approving it, which is what unlocks the AI interview.
+export type ApplicationStatus = "pending" | "submitted" | "cancelled" | "accepted";
 export type ApplicationStatusEvent = {
   type: EventType.ApplicationStatus;
   workflowId: string;
   userId: string;
   jobId: string;
   status: ApplicationStatus;
+};
+
+export type InterviewScheduledEvent = {
+  type: EventType.InterviewScheduled;
+  userId: string;
+  jobId: string;
+  roomId: string;
+  videoCallLink: string;
+  scheduledFor: string;
+};
+
+export type InterviewInviteStatus = "sending" | "sent" | "failed";
+
+// Addressed to the *company* user, so their applicants page can follow the
+// background email job. `userId` is the company; `applicantUserId` is who the
+// invitation is for.
+export type InterviewInviteEvent = {
+  type: EventType.InterviewInvite;
+  userId: string;
+  jobId: string;
+  applicantUserId: string;
+  status: InterviewInviteStatus;
+  error?: string;
 };
 
 export type EventInput =
@@ -122,6 +151,8 @@ export type EventInput =
   | { type: EventType.CvPreviewReady; workflowId: string; preview: unknown; missingFields: string[] }
   | { type: EventType.CvGenerated; workflowId: string; documentId: string; fileName: string; downloadUrl: string }
   | ApplicationStatusEvent
+  | InterviewScheduledEvent
+  | InterviewInviteEvent
   | { type: EventType.MemoryCompacted; workflowId: string; summarizedTurns: number; contextTokens: number; summary: string }
   | { type: EventType.AgentHandoff; workflowId: string; from: string; to: string; reason: string }
   | { type: EventType.PlanCreated; workflowId: string; steps: { id: string; agent: string; objective: string }[] }
@@ -145,4 +176,4 @@ export type ClientMessage =
       input: string;
       attachments?: { id: string; kind: "cv_pdf"; name: string }[];
     }
-  | { type: "request_application"; jobId: string };
+  | { type: "request_application"; jobId: string; cvUploadId: string };

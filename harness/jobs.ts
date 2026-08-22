@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import type { JobMatch, JobPost, JobPostInput } from "@shared/events";
 import type { CandidateProfile } from "@shared/candidate";
 
@@ -121,6 +121,16 @@ export function rankJobs(posts: JobPost[], profile: CandidateProfile): JobMatch[
 export async function findJob(jobId: string): Promise<JobPost | undefined> {
   const { db, jobPosts } = await import("./db");
   const rows = await db.select().from(jobPosts).where(eq(jobPosts.id, jobId)).limit(1);
+  return rows[0]?.data;
+}
+
+export async function findJobForOwner(jobId: string, ownerUserId: string): Promise<JobPost | undefined> {
+  const { db, jobPosts } = await import("./db");
+  const rows = await db
+    .select({ data: jobPosts.data })
+    .from(jobPosts)
+    .where(and(eq(jobPosts.id, jobId), eq(jobPosts.ownerUserId, ownerUserId)))
+    .limit(1);
   return rows[0]?.data;
 }
 

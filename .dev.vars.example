@@ -9,6 +9,13 @@
 OPENAI_API_KEY=sk-...
 DATABASE_URL=postgresql://user:password@host/db?sslmode=require
 
+# Optional. DBOS checkpoints every workflow step, so it is the chattiest user of
+# the database. If DATABASE_URL points at a distant hosted Postgres, those round
+# trips dominate chat latency. Point the checkpoint store at a local Postgres to
+# get it off the network; it holds no application data. Defaults to DATABASE_URL.
+#   docker run -d --name talentai-dbos -e POSTGRES_PASSWORD=dbos -p 5432:5432 postgres:17
+# DBOS_SYSTEM_DATABASE_URL=postgresql://postgres:dbos@localhost:5432/postgres
+
 # Authentication. Generate a high-entropy BETTER_AUTH_SECRET, then configure
 # Google with http://localhost:8787/api/auth/callback/google for local use.
 APP_ORIGIN=http://localhost:5173
@@ -16,3 +23,17 @@ BETTER_AUTH_URL=http://localhost:8787
 BETTER_AUTH_SECRET=replace-with-a-long-random-secret
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
+
+# Live interviews: a company scheduling an interview mints a Zego video-call
+# room and emails the applicant a join link over SMTP.
+ZEGO_APP_ID=123456789
+ZEGO_SERVER_SECRET=replace-with-your-zego-server-secret
+# Many networks block outbound port 587, which shows up as "Greeting never
+# received" (ETIMEDOUT) rather than a refused connection. Mailtrap and most
+# providers also listen on 2525 - prefer it if 587 hangs.
+SMTP_HOST=sandbox.smtp.mailtrap.io
+SMTP_PORT=2525
+SMTP_SECURE=false
+SMTP_USER=your-mailtrap-username
+SMTP_PASSWORD=your-mailtrap-password
+EMAIL_FROM=TalentAI <no-reply@example.com>

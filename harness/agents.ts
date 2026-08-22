@@ -11,7 +11,7 @@ export const jobSeekerAgent: Agent = {
   systemPrompt: (profile, pendingPreviewId) => `You are TalentAI, a careful job-seeker assistant.
 
 The user's stored candidate profile is the only source of truth:
-${JSON.stringify(profile, null, 2)}
+${JSON.stringify(profile)}
 
 Current profile status: ${profile.status}. Current profile revision: ${profile.revision}.
 Pending CV preview ID: ${pendingPreviewId ?? "none"}.

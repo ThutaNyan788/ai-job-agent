@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { BriefcaseBusiness, CheckCircle2, Clock3, MapPin, Send } from "lucide-react";
 import type { ApplicationStatusEvent, JobMatch } from "@shared/events";
 import { Button } from "@/components/ui/button";
+import { ApplyCvModal } from "./ApplyCvModal";
 
 export function JobDetailsPane({
   job,
@@ -10,7 +12,7 @@ export function JobDetailsPane({
 }: {
   job: JobMatch | null;
   application: ApplicationStatusEvent | null;
-  onRequestApplication: (job: JobMatch) => void;
+  onRequestApplication: (job: JobMatch, cvUploadId: string) => void;
   onDecideApplication: (workflowId: string, approved: boolean) => void;
 }) {
 
@@ -104,14 +106,25 @@ function ApplicationAction({
 }: {
   job: JobMatch;
   application: ApplicationStatusEvent | null;
-  onRequestApplication: (job: JobMatch) => void;
+  onRequestApplication: (job: JobMatch, cvUploadId: string) => void;
   onDecideApplication: (workflowId: string, approved: boolean) => void;
 }) {
+  const [showApplyModal, setShowApplyModal] = useState(false);
+
   if (!application) {
     return (
-      <Button className="mt-8 w-full gap-2" onClick={() => onRequestApplication(job)}>
-        <Send className="size-4" /> Review application
-      </Button>
+      <>
+        <Button className="mt-8 w-full gap-2" onClick={() => setShowApplyModal(true)}>
+          <Send className="size-4" /> Review application
+        </Button>
+        {showApplyModal && (
+          <ApplyCvModal
+            jobTitle={job.title}
+            onClose={() => setShowApplyModal(false)}
+            onApply={(cvUploadId) => onRequestApplication(job, cvUploadId)}
+          />
+        )}
+      </>
     );
   }
 
@@ -134,11 +147,16 @@ function ApplicationAction({
     );
   }
 
-  const submitted = application.status === "submitted";
+  const cancelled = application.status === "cancelled";
+  const label = application.status === "accepted"
+    ? "Application accepted"
+    : cancelled
+      ? "Application cancelled"
+      : "Application submitted";
   return (
-    <Button className="mt-8 w-full gap-2" disabled variant={submitted ? "default" : "outline"}>
+    <Button className="mt-8 w-full gap-2" disabled variant={cancelled ? "outline" : "default"}>
       <CheckCircle2 className="size-4" />
-      {submitted ? "Application submitted" : "Application cancelled"}
+      {label}
     </Button>
   );
 }

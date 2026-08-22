@@ -4,7 +4,7 @@ import type { JSONValue, ModelMessage } from "ai";
 import { EventType, type JobMatch } from "@shared/events";
 import { emit, emitTransient } from "./bus";
 import { jobSeekerAgent } from "./agents";
-import { model } from "./model";
+import { chatProviderOptions, model } from "./model";
 import { getCandidateProfile, getLatestCvPreview, runTool } from "./tools";
 import {
   buildContext,
@@ -29,7 +29,12 @@ async function modelTurn(
   userId: string,
   context: ModelMessage[],
 ): Promise<Turn> {
-  const result = streamText({ model, messages: context, tools: jobSeekerAgent.tools });
+  const result = streamText({
+    model,
+    messages: context,
+    tools: jobSeekerAgent.tools,
+    providerOptions: chatProviderOptions,
+  });
   for await (const part of result.fullStream) {
     if (part.type === "text-delta") {
       emitTransient({ type: EventType.ModelDelta, workflowId, text: part.text }, userId);
@@ -122,13 +127,20 @@ function toolResultMessage(call: ToolCall, value: JSONValue): ModelMessage {
 
 async function agentWorkflow(input: JobWorkflowInput): Promise<string> {
   const workflowId = DBOS.workflowID ?? "unknown";
-  await DBOS.runStep(
-    () => emit({ type: EventType.WorkflowStarted, workflowId, input: input.message }, input.userId),
-    { name: "started" },
-  );
 
-  let profile = await DBOS.runStep(() => getCandidateProfile(input.userId), { name: "load-profile" });
-  let pendingPreview = await DBOS.runStep(() => getLatestCvPreview(input.userId), { name: "load-cv-preview" });
+  // Every DBOS step checkpoints to Postgres, and each round trip to a hosted
+  // database is ~250ms+. These three used to run one after another, so the user
+  // waited on all of them before the model was even called. They are independent,
+  // so they run as one step, concurrently.
+  const [, [loadedProfile, loadedPreview]] = await DBOS.runStep(
+    () => Promise.all([
+      emit({ type: EventType.WorkflowStarted, workflowId, input: input.message }, input.userId),
+      Promise.all([getCandidateProfile(input.userId), getLatestCvPreview(input.userId)]),
+    ]),
+    { name: "start-and-load" },
+  );
+  let profile = loadedProfile;
+  let pendingPreview = loadedPreview;
   const turns: ModelMessage[][] = [];
   let summary = "";
 

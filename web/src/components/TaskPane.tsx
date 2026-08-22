@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { EventType, type AgentEvent, type ClientMessage, type JobMatch } from "@shared/events";
 import {
   ChatContainerContent,
@@ -241,7 +241,18 @@ export function TaskPane({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [pending, setPending] = useState<string | null>(null);
   const { turns, running } = toTranscript(events);
+
+  // The server echoes the message back as WorkflowStarted, but that event is
+  // written to Postgres before it is broadcast. Rather than stare at nothing
+  // for that round trip, show the message locally until the real one lands.
+  const echoed = pending !== null
+    && events.some((event) => event.type === EventType.WorkflowStarted && event.input === pending);
+  useEffect(() => {
+    if (echoed) setPending(null);
+  }, [echoed]);
+  const awaitingEcho = pending !== null && !echoed;
 
   async function submit() {
     const text = input.trim();
@@ -260,12 +271,14 @@ export function TaskPane({
       }
       setUploading(false);
     }
+    const submitted = text || "Please review my uploaded CV and recommend suitable jobs.";
     const sent = send({
       type: "submit_task",
-      input: text || "Please review my uploaded CV and recommend suitable jobs.",
+      input: submitted,
       attachments: attachment ? [attachment] : undefined,
     });
     if (sent) {
+      setPending(submitted);
       setInput("");
       setSelectedFile(null);
     }
@@ -304,7 +317,10 @@ export function TaskPane({
           {turns.map((turn) => (
             <TurnView key={turn.id} turn={turn} onJobSelect={onJobSelect} />
           ))}
-          {running && (
+          {awaitingEcho && pending && (
+            <TurnView turn={{ id: "pending", role: "user", text: pending }} onJobSelect={onJobSelect} />
+          )}
+          {(running || awaitingEcho) && (
             <div className="px-1">
               <TextDotsLoader />
             </div>
@@ -313,7 +329,7 @@ export function TaskPane({
       </ChatContainerRoot>
 
       <div className="border-t p-3">
-        <PromptInput value={input} onValueChange={setInput} onSubmit={() => void submit()} isLoading={running || uploading}>
+        <PromptInput value={input} onValueChange={setInput} onSubmit={() => void submit()} isLoading={running || uploading || awaitingEcho}>
           <PromptInputTextarea
             className="dark:bg-transparent"
             placeholder="For example: Generate a CV based on my React and TypeScript skills."

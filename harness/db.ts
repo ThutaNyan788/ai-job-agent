@@ -95,6 +95,20 @@ export const cvDocuments = pgTable(
   (table) => [index("cv_documents_user_id_idx").on(table.userId)],
 );
 
+export const applicationCv = pgTable(
+  "application_cv",
+  {
+    userId: text("user_id").notNull(),
+    jobId: text("job_id").notNull(),
+    fileName: text("file_name").notNull(),
+    mimeType: text("mime_type").notNull(),
+    dataBase64: text("data_base64").notNull(),
+    source: text("source").$type<"uploaded" | "generated">().notNull(),
+    createdAt: timestamp("created_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.jobId] })],
+);
+
 export type ApplicationRecord = {
   userId: string;
   jobId: string;
@@ -384,6 +398,61 @@ export async function loadCvDocument(
     : null;
 }
 
+// The exact file a candidate submitted with a specific application - distinct
+// from cv_documents (their library of AI-generated CVs), so a company always
+// sees what was actually submitted, not whatever the candidate's newest CV is.
+export async function saveApplicationCv(
+  userId: string,
+  jobId: string,
+  fileName: string,
+  mimeType: string,
+  data: Buffer,
+  source: "uploaded" | "generated",
+): Promise<void> {
+  await client`
+    INSERT INTO application_cv (user_id, job_id, file_name, mime_type, data_base64, source)
+    VALUES (${userId}, ${jobId}, ${fileName}, ${mimeType}, ${data.toString("base64")}, ${source})
+    ON CONFLICT (user_id, job_id) DO UPDATE SET
+      file_name = EXCLUDED.file_name, mime_type = EXCLUDED.mime_type,
+      data_base64 = EXCLUDED.data_base64, source = EXCLUDED.source
+  `;
+}
+
+export async function loadApplicationCvSummary(
+  userId: string,
+  jobId: string,
+): Promise<{ fileName: string; source: "uploaded" | "generated" } | null> {
+  const rows = await client<{ file_name: string; source: "uploaded" | "generated" }[]>`
+    SELECT file_name, source FROM application_cv
+    WHERE user_id = ${userId} AND job_id = ${jobId}
+  `;
+  return rows[0] ? { fileName: rows[0].file_name, source: rows[0].source } : null;
+}
+
+export async function loadApplicationCvForDownload(
+  userId: string,
+  jobId: string,
+): Promise<{ fileName: string; mimeType: string; data: Buffer } | null> {
+  const rows = await client<{ file_name: string; mime_type: string; data_base64: string }[]>`
+    SELECT file_name, mime_type, data_base64 FROM application_cv
+    WHERE user_id = ${userId} AND job_id = ${jobId}
+  `;
+  return rows[0]
+    ? { fileName: rows[0].file_name, mimeType: rows[0].mime_type, data: Buffer.from(rows[0].data_base64, "base64") }
+    : null;
+}
+
+export async function loadLatestCvDocument(
+  userId: string,
+): Promise<{ id: string; fileName: string } | null> {
+  const rows = await client<{ id: string; file_name: string }[]>`
+    SELECT id, file_name FROM cv_documents
+    WHERE user_id = ${userId}
+    ORDER BY created_at DESC LIMIT 1
+  `;
+  return rows[0] ? { id: rows[0].id, fileName: rows[0].file_name } : null;
+}
+
 function rowToApplication(row: {
   user_id: string;
   job_id: string;
@@ -433,6 +502,23 @@ export async function resolveApplication(
   return ensureApplication(userId, jobId, workflowId);
 }
 
+// A company accepting one of its applicants. Only a submitted application can
+// be accepted, so a pending or cancelled one is left untouched and reported
+// back as null.
+export async function acceptApplication(userId: string, jobId: string): Promise<ApplicationRecord | null> {
+  const rows = await client<{
+    user_id: string;
+    job_id: string;
+    workflow_id: string;
+    status: ApplicationStatus;
+  }[]>`
+    UPDATE applications SET status = 'accepted'
+    WHERE user_id = ${userId} AND job_id = ${jobId} AND status = 'submitted'
+    RETURNING user_id, job_id, workflow_id, status
+  `;
+  return rows[0] ? rowToApplication(rows[0]) : null;
+}
+
 export async function ownsApplicationWorkflow(userId: string, workflowId: string): Promise<boolean> {
   const rows = await client<{ found: number }[]>`
     SELECT 1 AS found FROM applications
@@ -440,4 +526,33 @@ export async function ownsApplicationWorkflow(userId: string, workflowId: string
     LIMIT 1
   `;
   return rows.length > 0;
+}
+
+export async function listApplicationsForJob(jobId: string): Promise<ApplicationRecord[]> {
+  const rows = await client<{
+    user_id: string;
+    job_id: string;
+    workflow_id: string;
+    status: ApplicationStatus;
+  }[]>`
+    SELECT user_id, job_id, workflow_id, status
+    FROM applications WHERE job_id = ${jobId}
+  `;
+  return rows.map(rowToApplication);
+}
+
+export async function applicationExists(userId: string, jobId: string): Promise<boolean> {
+  const rows = await client<{ found: number }[]>`
+    SELECT 1 AS found FROM applications
+    WHERE user_id = ${userId} AND job_id = ${jobId}
+    LIMIT 1
+  `;
+  return rows.length > 0;
+}
+
+export async function loadUserEmail(userId: string): Promise<string | null> {
+  const rows = await client<{ email: string }[]>`
+    SELECT email FROM "user" WHERE id = ${userId}
+  `;
+  return rows[0]?.email ?? null;
 }

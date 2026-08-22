@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BriefcaseBusiness, CalendarDays, CirclePlus, Loader2, MapPin } from "lucide-react";
+import { BriefcaseBusiness, CalendarDays, CirclePlus, Loader2, MapPin, Users } from "lucide-react";
 import type { JobPost } from "@shared/events";
 import { apiFetch } from "@/api";
 import { handleInternalLink } from "@/navigation";
@@ -59,6 +59,13 @@ export function CompanyJobsPage({ email }: { email: string }) {
                 <span>{titleCase(job.employmentType)}</span>
                 <span className="inline-flex items-center gap-1.5"><CalendarDays className="size-3.5" /> {new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(new Date(job.postedAt))}</span>
               </div>
+              <a
+                href={`/company/jobs/${encodeURIComponent(job.id)}/applicants`}
+                onClick={handleInternalLink}
+                className="mt-4 inline-flex items-center gap-2 text-sm font-bold text-pink-600 hover:underline"
+              >
+                <Users className="size-4" /> View applicants
+              </a>
             </article>
           ))}
         </div>

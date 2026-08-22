@@ -1,0 +1,8 @@
+{
+  "skillOverrides": {
+    "openspec-apply-change": "off",
+    "openspec-archive-change": "off",
+    "openspec-explore": "off",
+    "openspec-propose": "off"
+  }
+}

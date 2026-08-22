@@ -1,14 +1,20 @@
 import { generateText } from "ai";
 import type { ModelMessage } from "ai";
-import { model } from "./model";
+import { chatProviderOptions, model } from "./model";
 
 // Compact once the recent-turns window grows past MAX_CONTEXT_TOKENS, peeling
 // the oldest turns into the summary until it's back under KEEP_CONTEXT_TOKENS.
 // Token budget — not turn count — is what actually drives context bloat, and it
 // holds up even when the model batches many tool calls into one turn.
-// (Rough estimate: ~4 chars per token. Kept low so compaction kicks in on a short task.)
-export const MAX_CONTEXT_TOKENS = 3000;
-export const KEEP_CONTEXT_TOKENS = 1500;
+// (Rough estimate: ~4 chars per token.)
+//
+// These were deliberately tiny in the workshop so compaction was visible within
+// one short task. In the real app that backfires: the system prompt plus the
+// profile JSON nearly fills 3000 on its own, so almost every turn paid for an
+// extra blocking summarize() call. A whole extra model round trip costs far
+// more latency than carrying a few thousand more prefill tokens.
+export const MAX_CONTEXT_TOKENS = 12_000;
+export const KEEP_CONTEXT_TOKENS = 6_000;
 
 export function estimateTokens(messages: ModelMessage[]): number {
   const chars = messages.reduce(
@@ -58,6 +64,9 @@ export async function summarize(
 
   const { text } = await generateText({
     model,
+    // Compression is mechanical - spending reasoning tokens here just delays the
+    // turn that is waiting on it.
+    providerOptions: chatProviderOptions,
     messages: [
       {
         role: "system",

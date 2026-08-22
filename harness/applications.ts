@@ -2,7 +2,7 @@ import { DBOS } from "@dbos-inc/dbos-sdk";
 import type { JobPost } from "@shared/events";
 import { EventType, type ApplicationStatus } from "@shared/events";
 import { emit } from "./bus";
-import { ensureApplication, resolveApplication } from "./db";
+import { ensureApplication, loadCvUpload, resolveApplication, saveApplicationCv } from "./db";
 import { needsApplicationApproval } from "./application-state";
 
 const APPROVAL_TIMEOUT_S = 86_400;
@@ -10,7 +10,18 @@ const APPROVAL_TIMEOUT_S = 86_400;
 export type ApplicationWorkflowInput = {
   userId: string;
   job: JobPost;
+  cvUploadId: string;
 };
+
+// Copies the CV the candidate attached at apply time into a permanent,
+// per-application record, so a company reviewing this application later sees
+// exactly what was submitted - not whatever cv_uploads (which expires after
+// 24h) or the candidate's CV library happens to hold by then.
+async function attachApplicationCv(userId: string, jobId: string, cvUploadId: string): Promise<void> {
+  const upload = await loadCvUpload(userId, cvUploadId);
+  if (!upload) return;
+  await saveApplicationCv(userId, jobId, upload.fileName, upload.mimeType, upload.data, "uploaded");
+}
 
 async function emitStatus(
   workflowId: string,
@@ -30,6 +41,10 @@ async function applicationWorkflow(input: ApplicationWorkflowInput): Promise<App
   await DBOS.runStep(
     () => emitStatus(application.workflowId, input.userId, input.job.id, application.status),
     { name: "application-pending" },
+  );
+  await DBOS.runStep(
+    () => attachApplicationCv(input.userId, input.job.id, input.cvUploadId),
+    { name: "attach-application-cv" },
   );
 
   if (!needsApplicationApproval(application, workflowId)) return application.status;

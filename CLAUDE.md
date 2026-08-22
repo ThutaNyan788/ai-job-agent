@@ -4,123 +4,66 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a **one-day workshop course**: "Harness Engineering & Agent Orchestration." It is a
-**systems workshop, not an "agent app" workshop.**
+> **Note (2026-08-21):** This repo started as the "Harness Engineering & Agent Orchestration"
+> workshop scaffold (see below), but the current branch (`chatCVgeneration`, off real feature
+> branches like `AdminAccount`, `Authentication`, `LandingPage`, `JobListUI`, `InterviewerList`,
+> `ProductionStep1`) has evolved it into a real vertical product: **TalentAI**, a conversational
+> job-matching app. This is the opposite of the original "domain-neutral agent, harness is the
+> protagonist" premise — worth keeping in mind since the rest of this file (Course Structure,
+> Branching Strategy, Lesson Notes, parts of Repo structure) describes the *original workshop
+> plan*, not what's actually in the tree today (there is no `lessons/` directory, and the git
+> branches don't follow the `lesson-1..lesson-7` scheme).
 
-**Core idea:** Across the day we build ONE persistent codebase — a **mini agent runtime (the
-harness)**: the layer that wraps a dumb LLM loop and makes it production-grade. We do **not**
-build a vertical agent. The agent is a deliberately boring, domain-neutral task agent; the
-**harness is the protagonist.** Each lesson adds one capability to the runtime.
+**What TalentAI actually does, as built:**
 
-The mantra repeated all day: **agent systems are workflow systems.** The LLM decides the next
-semantic step; the harness owns execution.
+- A chat-based assistant ("TalentAI") that helps a job-seeker: import an existing CV (PDF
+  upload → `extractUploadedCv` → user confirms extracted facts), build/update a candidate
+  profile (`updateCandidateProfile`, `confirmCandidateProfile`), generate a tailored CV PDF
+  (`prepareCvPreview` → explicit approval → `generateCvPdf`), and search/rank job postings
+  (`searchJobs`, scored in `harness/jobs.ts`). System prompt and tool wiring live in
+  `harness/agents.ts`; the model loop lives in `harness/runtime.ts`.
+- A two-sided marketplace: `user` accounts (job seekers) and `company` accounts (post jobs via
+  `harness/jobs.ts` + `server/index.ts` `/api/company/jobs`, browse via `web/src/components/
+  CompanyJobsPage.tsx`, `JobListPage.tsx`).
+- A job-application flow with **human-in-the-loop approval**: `harness/applications.ts` runs a
+  DBOS workflow that emits `ApprovalRequested`, suspends on `DBOS.recv("approval", ...)` for up
+  to 24h, and resumes when the user approves/rejects via `POST /api/approve/:workflowId`.
+- Auth via **better-auth** (email/password + Google OAuth), backed by Drizzle/Postgres
+  (`server/auth.ts`, `harness/auth-schema.ts`), with a `role` field (`user` | `company`).
+- Durable execution is provided by **DBOS** (`@dbos-inc/dbos-sdk`), not a hand-rolled
+  StateStore/EventLog — `DBOS.launch()` recovers in-flight workflows on restart, `DBOS.runStep`
+  checkpoints each step, `DBOS.startWorkflow` / `DBOS.send` / `DBOS.recv` replace the
+  from-scratch L2/L7 primitives the original workshop plan describes below.
+- Everything (chat turns, tool calls, job matches, CV events, approvals) still flows through the
+  same event-bus-over-WebSocket shape the workshop scaffold set up (`shared/events.ts`,
+  `harness/bus.ts`, `server/index.ts`), rendered by the inspector-derived UI in `web/`.
 
-## The spine
+**Open questions (unresolved as of 2026-08-21 — confirm before relying on either answer):**
 
-Everything builds toward one execution loop. Each lesson fills in one line:
+- **Admin role.** `server/auth.ts`'s role enum is only `"user" | "company"` — there is no
+  `"admin"` anywhere in the code (verified by grep). But recent history mentions an admin
+  account (`492c9d4 admin role account created`) and there's an `AdminAccount` branch. Unclear
+  whether admin support lives on an unmerged branch, is done some other way (allowlist/DB flag),
+  or was reverted. Don't assume an admin role exists in `chatCVgeneration` until checked.
+- **`candidate_profiles` legacy columns.** `harness/db.ts` keeps old flat columns (`position`,
+  `programming_languages`, `skills`, etc.) written in parallel with the new `profile_data` jsonb
+  column, commented as mid-"migration window". Whether that migration is finished (columns are
+  dead weight) or still relied on somewhere is unresolved — don't drop the legacy columns without
+  checking every reader of them first.
 
-```ts
-async function runWorkflow(workflowId, input) {
-  const state = await stateStore.load(workflowId);
-  while (!state.done) {
-    const context = await hydrateContext(state);     // L4 memory
-    const step    = await agent.next(context);       // the LLM decides
-    await policy.check(step);                         // L3 sandbox / L7 approval
-    await eventLog.append(workflowId, step);          // L2 durable
-    const result  = await executeStep(step);          // tool / handoff / approval
-    await stateStore.checkpoint(workflowId, result);  // L2 durable
-  }
-}
-```
+---
 
-## The scenario (domain-neutral, reused every lesson)
+## Gotchas (not derivable from the code)
 
-One generic **task packet** — review mixed work items, classify, draft actions, pause before
-external actions. Tools are fake-but-realistic, split into:
-
-- **Safe** (no approval): `searchKnowledgeBase`, `summarizeDocument`, `classifyItem`, `createDraft`
-- **Dangerous** (require approval in L7): `runCode`, `sendMessage`, `updateRecord`, `createTicket`
-
-This single scenario yields routing, memory, supervision, and approval without making the course
-about any real product.
-
-## Tech Stack
-
-- **Runtime:** Node.js + TypeScript (run with `tsx`, no build step).
-- **LLM provider:** OpenAI via the Vercel AI SDK (default model `gpt-5.5`).
-- **Libraries:** Minimal and chosen per lesson (e.g. an isolation primitive in L3, a store in
-  L2/L4). Do not lock these in prematurely. We build the concepts from scratch and *name* the
-  production tools (Temporal/Inngest, e2b/Firecracker, LangGraph/Mastra) rather than depend on them.
-- **Transport:** Express + `ws`. The browser and server speak over ONE WebSocket: client→server
-  commands (`submit_task`, later `approve`) and server→client the harness event stream. We do NOT
-  use the AI SDK's `useChat`/UI transport — that's request-scoped and can't express server-initiated
-  events (a sub-agent finishing, a workflow resuming days later). The AI SDK is used server-side only
-  (`streamText`), bridged into our event bus.
-- **Inspector UI:** a small, prebuilt web dashboard (Vite + React + prompt-kit/shadcn/Tailwind) in
-  `web/`. It renders the harness event stream (step timeline, checkpoints, sub-agent tree, approval
-  modal). **Students never build the inspector** — it's purely a projection of the events the harness
-  emits, so invisible infra becomes visible (critical for the VOD).
-- **Notes site:** VitePress, served from `lessons/`.
-
-Everything runs locally. No deployment.
-
-## Repo structure
-
-```
-shared/
-  events.ts     AgentEvent union — the contract between harness and UI (grows each lesson)
-harness/        the runtime — accretes one module per lesson
-  runtime.ts    the spine (runAgent → runWorkflow / start / resume / suspend). STUB in the starter.
-  model.ts      the AI SDK OpenAI model (gpt-5.5 default)
-  tools.ts      safe + dangerous tool definitions                      — L1+
-  state.ts      StateStore (checkpoint/load)                            — L2
-  policies.ts   ToolPolicy (beforeToolCall)                            — L3
-  memory.ts     Memory + ContextHydrator                               — L4
-  router.ts     Router + typed Handoff                                 — L5
-  supervisor.ts Supervisor (fan-out/fan-in)                            — L6
-  approvals.ts  ApprovalStore + suspend/resume                         — L7
-server/
-  index.ts      Express + ws; on submit_task calls runAgent with an emit()
-  bus.ts        in-memory EventBus + createEmitter (becomes durable in L2)
-web/            prebuilt inspector (Vite + React + prompt-kit). NOT taught.
-examples/       one runnable scenario per lesson (added as we go)
-lessons/        VitePress notes (one folder per lesson)
-components.json shadcn config for pulling more prompt-kit components
-```
-
-## Commands
-
-```bash
-npm run dev         # harness server (:8787) + inspector UI (:5173)
-npm run typecheck   # tsc --noEmit across server/shared/harness/web
-npm run docs        # serve the lesson notes with VitePress
-```
-
-Per-lesson run commands are introduced in each lesson's notes. The starter ships with a STUB
-`runAgent` so the app runs end-to-end (browser → ws → server → bus → browser) with the agent loop
-left as the hole you fill in Lesson 1.
-
-## Course Structure
-
-Strict rhythm per lesson (this matters most for the VOD): **name the production failure → show
-the naive agent fail live → live-code the harness module that fixes it → re-run and watch it
-survive → map it to the real production tool.** Lessons are under one hour. 7 lessons in a day,
-split Morning (Harness Core: L1–3) / Afternoon (Control Plane: L4–7). See `course.yml`.
-
-### Branching Strategy
-
-Each lesson gets its own branch. The next branch includes the previous lesson's solution so
-students who fall behind can catch up by checking out the next branch.
-
-Build forward in one pass: `lesson-1` → ... → `lesson-7` → `main`. Each branch adds **one harness
-module** (not a new app). `main`/`complete` point at the latest lesson — by then the harness is
-complete. Notes are written alongside the code as we go.
-
-### Lesson Notes
-
-Markdown served as a VitePress site from `lessons/<nn-slug>/index.md`. Each lesson's note uses the
-rhythm above: **The pain / The failure mode / What the harness adds / Live code (full diffs) / The
-demo / In production.** Add new lessons to the sidebar in `lessons/.vitepress/config.ts`.
+- **One WebSocket, not the AI SDK UI transport.** The browser and server speak over a single
+  WebSocket: client→server commands and server→client the harness event stream. We deliberately do
+  NOT use the AI SDK's `useChat`/UI transport — it is request-scoped and cannot express
+  server-initiated events (a sub-agent finishing, a workflow resuming days later). The AI SDK is
+  used server-side only (`streamText`), bridged into the event bus.
+- **`harness/system-prompt.ts` is dead code.** It exports only `SAMPLE_TASK`, a refund/billing demo
+  string unrelated to TalentAI. Nothing in the tree imports it — safe to delete when touching this area.
+- **`harness/sandbox.ts` is `node:vm`, not a real isolate.** It does not stop async hangs. See its
+  own header comment before trusting it with untrusted code.
 
 ## Code Style
 

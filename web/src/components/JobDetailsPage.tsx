@@ -16,6 +16,7 @@ import {
 import type { ApplicationStatusEvent, JobPost } from "@shared/events";
 import { apiFetch } from "@/api";
 import { handleInternalLink } from "@/navigation";
+import { ApplyCvModal } from "./ApplyCvModal";
 import { formatSalary, titleCase, workTypeLabel } from "./JobListPage";
 
 export function JobDetailsPage({
@@ -28,7 +29,7 @@ export function JobDetailsPage({
   jobId: string;
   application: ApplicationStatusEvent | null;
   connected: boolean;
-  onRequestApplication: (jobId: string) => void;
+  onRequestApplication: (jobId: string, cvUploadId: string) => void;
   onDecideApplication: (workflowId: string, approved: boolean) => Promise<void>;
 }) {
   const [job, setJob] = useState<JobPost | null>(null);
@@ -36,6 +37,7 @@ export function JobDetailsPage({
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [deciding, setDeciding] = useState(false);
+  const [showApplyModal, setShowApplyModal] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -137,10 +139,18 @@ export function JobDetailsPage({
           <div className="flex w-full items-center gap-3 sm:w-auto">
             <button type="button" onClick={() => setSaved((value) => !value)} aria-label={saved ? "Remove saved job" : "Save job"} className={`grid size-11 shrink-0 place-items-center rounded-xl border transition ${saved ? "border-pink-200 bg-pink-50 text-pink-500" : "border-slate-200 text-slate-400 hover:bg-slate-50"}`}><Heart className={`size-4 ${saved ? "fill-current" : ""}`} /></button>
             <button type="button" onClick={() => void shareJob(job)} aria-label="Share job" className="grid size-11 shrink-0 place-items-center rounded-xl border border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-slate-900"><Share2 className="size-4" /></button>
-            <ApplicationButtons application={application} connected={connected} deciding={deciding} onStart={() => onRequestApplication(job.id)} onDecide={decide} />
+            <ApplicationButtons application={application} connected={connected} deciding={deciding} onStart={() => setShowApplyModal(true)} onDecide={decide} />
           </div>
         </div>
       </div>
+
+      {showApplyModal && (
+        <ApplyCvModal
+          jobTitle={job.title}
+          onClose={() => setShowApplyModal(false)}
+          onApply={(cvUploadId) => onRequestApplication(job.id, cvUploadId)}
+        />
+      )}
     </div>
   );
 }
@@ -158,6 +168,7 @@ function Info({ label, value }: { label: string; value: string }) {
 }
 
 function ApplicationButtons({ application, connected, deciding, onStart, onDecide }: { application: ApplicationStatusEvent | null; connected: boolean; deciding: boolean; onStart: () => void; onDecide: (approved: boolean) => Promise<void> }) {
+  if (application?.status === "accepted") return <button type="button" disabled className="flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-6 text-xs font-black uppercase tracking-wider text-white sm:flex-initial"><CheckCircle2 className="size-4" /> Accepted</button>;
   if (application?.status === "submitted") return <button type="button" disabled className="flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-slate-900 px-6 text-xs font-black uppercase tracking-wider text-white sm:flex-initial"><CheckCircle2 className="size-4" /> Applied</button>;
   if (application?.status === "cancelled") return <button type="button" disabled className="flex h-11 flex-1 items-center justify-center rounded-xl border border-slate-200 px-6 text-xs font-black uppercase tracking-wider text-slate-400 sm:flex-initial">Application cancelled</button>;
   if (application?.status === "pending") {

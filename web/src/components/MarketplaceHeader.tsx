@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BriefcaseBusiness, CirclePlus, LayoutDashboard, LogOut, Menu, MessageSquareText, X } from "lucide-react";
+import { BriefcaseBusiness, CirclePlus, LayoutDashboard, LogOut, Menu, MessageSquareText, Video, X } from "lucide-react";
 import { authClient } from "@/auth-client";
 import { handleInternalLink, navigate } from "@/navigation";
 
@@ -29,9 +29,14 @@ export function MarketplaceHeader({ email, role = "user" }: { email: string; rol
               <a href="/company/jobs/new" onClick={handleInternalLink} className="inline-flex items-center gap-2 rounded-xl bg-pink-600 px-3 py-2 text-sm font-bold text-white hover:bg-pink-700"><CirclePlus className="size-4" /> Create job</a>
             </>
           ) : (
-            <a href="/ai-assistant" onClick={handleInternalLink} className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 hover:text-pink-600">
-              <MessageSquareText className="size-4" /> AI assistant
-            </a>
+            <>
+              <a href="/ai-assistant" onClick={handleInternalLink} className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 hover:text-pink-600">
+                <MessageSquareText className="size-4" /> AI assistant
+              </a>
+              <a href="/interviews" onClick={handleInternalLink} className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 hover:text-pink-600">
+                <Video className="size-4" /> Interviews
+              </a>
+            </>
           )}
           <span className="max-w-44 truncate text-xs text-slate-400" title={email}>{email}</span>
           <button type="button" onClick={() => void signOut()} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">
@@ -54,7 +59,10 @@ export function MarketplaceHeader({ email, role = "user" }: { email: string; rol
                 <a href="/company/jobs/new" onClick={handleInternalLink} className="rounded-xl bg-pink-600 px-3 py-2.5 text-center text-sm font-semibold text-white">Create job</a>
               </>
             ) : (
-              <a href="/ai-assistant" onClick={handleInternalLink} className="rounded-xl px-3 py-2.5 text-sm font-semibold hover:bg-pink-50">AI assistant</a>
+              <>
+                <a href="/ai-assistant" onClick={handleInternalLink} className="rounded-xl px-3 py-2.5 text-sm font-semibold hover:bg-pink-50">AI assistant</a>
+                <a href="/interviews" onClick={handleInternalLink} className="rounded-xl px-3 py-2.5 text-sm font-semibold hover:bg-pink-50">Interviews</a>
+              </>
             )}
             <button type="button" onClick={() => void signOut()} className="mt-2 inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-semibold">
               <LogOut className="size-4" /> Sign out
