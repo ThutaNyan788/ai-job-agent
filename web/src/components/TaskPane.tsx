@@ -20,7 +20,6 @@ import {
   PromptInputTextarea,
 } from "@/components/ui/prompt-input";
 import { Button } from "@/components/ui/button";
-import { TextDotsLoader } from "@/components/ui/loader";
 import {
   ArrowUp,
   Circle,
@@ -29,7 +28,9 @@ import {
   Eraser,
   Loader2,
   Network,
+  Paperclip,
   ShieldAlert,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { uploadCv } from "@/api";
@@ -320,11 +321,7 @@ export function TaskPane({
           {awaitingEcho && pending && (
             <TurnView turn={{ id: "pending", role: "user", text: pending }} onJobSelect={onJobSelect} />
           )}
-          {(running || awaitingEcho) && (
-            <div className="px-1">
-              <TextDotsLoader />
-            </div>
-          )}
+          {(running || awaitingEcho) && <ThinkingIndicator />}
         </ChatContainerContent>
       </ChatContainerRoot>
 
@@ -344,7 +341,7 @@ export function TaskPane({
                   disabled={running || uploading}
                   onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
                 />
-                <span aria-hidden="true">📎</span> Attach PDF
+                <Paperclip className="size-3.5" aria-hidden="true" /> Attach PDF
               </label>
               {selectedFile && (
                 <span className="text-muted-foreground max-w-36 truncate text-xs" title={selectedFile.name}>
@@ -376,6 +373,27 @@ export function TaskPane({
 }
 
 const PROSE = "prose prose-sm dark:prose-invert max-w-none";
+
+// Shown while the model is working: a pulsing sparkle, a shimmering label and
+// three dots that rise in sequence. Purely a projection of `running` — no state.
+function ThinkingIndicator() {
+  return (
+    <div className="flex items-center gap-2.5 px-1">
+      <span className="relative flex size-6 items-center justify-center">
+        <span className="bg-primary/30 absolute inset-0 rounded-full animate-[thinking-halo_1.8s_ease-out_infinite]" />
+        <span className="bg-primary/10 text-primary relative flex size-6 items-center justify-center rounded-full">
+          <Sparkles className="size-3.5 animate-pulse" />
+        </span>
+      </span>
+      <span className="thinking-shimmer text-sm font-medium">TalentAI is thinking</span>
+      <span className="flex items-end gap-1 pb-0.5">
+        <span className="bg-primary/70 size-1 rounded-full animate-[thinking-dot_1.4s_ease-in-out_infinite]" />
+        <span className="bg-primary/70 size-1 rounded-full animate-[thinking-dot_1.4s_ease-in-out_0.2s_infinite]" />
+        <span className="bg-primary/70 size-1 rounded-full animate-[thinking-dot_1.4s_ease-in-out_0.4s_infinite]" />
+      </span>
+    </div>
+  );
+}
 
 function ApprovalCard({ turn }: { turn: Extract<Turn, { role: "approval" }> }) {
   return (
