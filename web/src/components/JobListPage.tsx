@@ -14,6 +14,9 @@ import {
   X,
   Send,
   MessageSquare,
+  Filter,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import type { JobPost } from "@shared/events";
 import heroImage from "@/assets/hero.png";
@@ -37,8 +40,10 @@ export function JobListPage({ email, role = "user" }: { email: string; role?: "u
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
+  // Mobile filter drawer state
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
+
   // AI Assistant Pop-up state
-  const [isAiOpen, setIsAiOpen] = useState(false);
   const [isAiPopupOpen, setIsAiPopupOpen] = useState(false);
   const [aiMessage, setAiMessage] = useState("");
   const [chatLog, setChatLog] = useState<Array<{ sender: "ai" | "user"; text: string }>>([
@@ -89,56 +94,26 @@ export function JobListPage({ email, role = "user" }: { email: string; role?: "u
     }, 600);
   }
 
+  const activeFilterCount = Object.values(filters).filter((val) => Boolean(val.trim())).length;
+
   return (
-    <div className="min-h-screen bg-slate-50/50 text-slate-800 antialiased selection:bg-pink-100 selection:text-pink-700 relative">
+    <div className="min-h-screen bg-slate-50/50 text-slate-800 antialiased selection:bg-pink-100 selection:text-pink-700 relative pb-12 sm:pb-0">
       <MarketplaceHeader email={email} role={role} />
 
       {/* Hero Search Section */}
-      <section className="relative overflow-hidden bg-pink-400/20 px-4 py-12 text-white sm:px-6 lg:px-8">
+      <section className="relative overflow-hidden bg-pink-400/20 px-4 py-8 sm:py-12 sm:px-6 lg:px-8">
         {/* Animated background */}
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          {/* Pink glow */}
           <div className="absolute -left-32 -top-24 h-72 w-72 rounded-full bg-pink-500/25 blur-3xl animate-pulse" />
-
-          {/* Purple glow */}
           <div
             className="absolute right-[-100px] top-[-120px] h-96 w-96 rounded-full bg-fuchsia-500/15 blur-3xl"
-            style={{
-              animation: "float 8s ease-in-out infinite",
-            }}
+            style={{ animation: "float 8s ease-in-out infinite" }}
           />
-
-          {/* Blue glow */}
           <div
             className="absolute left-[35%] bottom-[-180px] h-96 w-96 rounded-full bg-indigo-500/10 blur-3xl"
-            style={{
-              animation: "floatReverse 10s ease-in-out infinite",
-            }}
+            style={{ animation: "floatReverse 10s ease-in-out infinite" }}
           />
 
-          {/* Small floating lights */}
-          <div
-            className="absolute left-[15%] top-[30%] size-2 rounded-full bg-pink-400/60"
-            style={{
-              animation: "float 5s ease-in-out infinite",
-            }}
-          />
-
-          <div
-            className="absolute right-[25%] top-[20%] size-1.5 rounded-full bg-fuchsia-300/60"
-            style={{
-              animation: "floatReverse 6s ease-in-out infinite",
-            }}
-          />
-
-          <div
-            className="absolute right-[10%] bottom-[25%] size-2 rounded-full bg-pink-300/50"
-            style={{
-              animation: "float 7s ease-in-out infinite",
-            }}
-          />
-
-          {/* Grid */}
           <div
             className="absolute inset-0 opacity-[0.035]"
             style={{
@@ -150,28 +125,25 @@ export function JobListPage({ email, role = "user" }: { email: string; role?: "u
         </div>
 
         {/* Main content */}
-        <div className="relative z-10 mx-auto max-w-7xl pb-16">
-          <div className="mb-8 flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+        <div className="relative z-10 mx-auto max-w-7xl pb-8 sm:pb-16">
+          <div className="mb-6 sm:mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-slate-900 text-3xl font-extrabold tracking-tight sm:text-4xl lg:text-5xl">
+              <div className="flex items-center gap-2.5 sm:gap-3">
+                <h1 className="text-slate-900 text-2xl font-extrabold tracking-tight sm:text-4xl lg:text-5xl">
                   Find Your Dream Job
                 </h1>
 
-                {/* Dynamic Two-Layer Magnifying Glass Search Icon Widget */}
-                <div className="relative w-14 h-14 hidden sm:flex items-center justify-center shrink-0">
+                {/* Two-Layer Magnifying Glass Search Icon Widget */}
+                <div className="relative w-10 h-10 sm:w-14 sm:h-14 flex items-center justify-center shrink-0">
                   <div 
                     className="absolute flex items-center justify-center transform rotate-6"
                     style={{ animation: "float 6s ease-in-out infinite" }}
                   >
-                    {/* Main Glass Circle Ring */}
-                    <div className="w-11 h-11 rounded-full border-[3px] border-white/80 bg-gradient-to-tr from-pink-400/40 to-rose-400/30 backdrop-blur-xl shadow-lg flex items-center justify-center relative overflow-hidden">
+                    <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-full border-[2.5px] sm:border-[3px] border-white/80 bg-gradient-to-tr from-pink-400/40 to-rose-400/30 backdrop-blur-xl shadow-lg flex items-center justify-center relative overflow-hidden">
                       <div className="absolute inset-1 rounded-full border border-white/50 bg-gradient-to-b from-white/40 to-transparent pointer-events-none" />
-                      
-                      {/* Centered Vector Magnifying Glass Search Icon */}
-                      <div className="w-6 h-6 rounded-full bg-pink-500/20 backdrop-blur-md flex items-center justify-center shadow-inner">
+                      <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-pink-500/20 backdrop-blur-md flex items-center justify-center shadow-inner">
                         <svg 
-                          className="size-3.5 text-pink-600 animate-pulse drop-shadow-sm" 
+                          className="size-3 sm:size-3.5 text-pink-600 animate-pulse drop-shadow-sm" 
                           fill="none" 
                           viewBox="0 0 24 24" 
                           stroke="currentColor" 
@@ -181,110 +153,80 @@ export function JobListPage({ email, role = "user" }: { email: string; role?: "u
                         </svg>
                       </div>
                     </div>
-
-                    {/* Sleek Gradient Handle */}
-                    <div className="absolute -bottom-2 -right-3 w-6 h-2 bg-gradient-to-r from-pink-500 via-rose-400 to-pink-400 rounded-full shadow-md transform rotate-45 border border-white/40" />
+                    <div className="absolute -bottom-1.5 -right-2 sm:-bottom-2 sm:-right-3 w-4 h-1.5 sm:w-6 sm:h-2 bg-gradient-to-r from-pink-500 via-rose-400 to-pink-400 rounded-full shadow-md transform rotate-45 border border-white/40" />
                   </div>
                 </div>
 
-                <Sparkles className="size-6 shrink-0 animate-pulse fill-pink-400 text-pink-400 sm:size-7" />
+                <Sparkles className="size-5 shrink-0 animate-pulse fill-pink-400 text-pink-400 sm:size-7" />
               </div>
 
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
-                Discover handpicked career opportunities matched to your
-                expertise, experience, and goals.
+              <p className="mt-2 sm:mt-3 max-w-2xl text-xs sm:text-base leading-relaxed text-slate-600">
+                Discover handpicked career opportunities matched to your expertise, experience, and goals.
               </p>
             </div>
 
-            {/* AI Card */}
+            {/* AI Card (Hidden on mobile, visible on desktop) */}
             <div className="hidden items-center gap-3 rounded-2xl border border-slate-800 bg-slate-900/80 p-3 shadow-xl backdrop-blur-xl lg:flex">
               <div className="grid size-11 place-items-center rounded-xl bg-white">
-                <img
-                  src={Logo}
-                  alt="AI"
-                  className="size-9 object-contain"
-                />
+                <img src={Logo} alt="AI" className="size-9 object-contain" />
               </div>
-
               <div>
-                <p className="text-xs font-bold text-white">
-                  AI Assistant Ready
-                </p>
-
-                <p className="mt-0.5 text-[11px] text-slate-500">
-                  Find jobs faster with AI
-                </p>
+                <p className="text-xs font-bold text-white">AI Assistant Ready</p>
+                <p className="mt-0.5 text-[11px] text-slate-500">Find jobs faster with AI</p>
               </div>
             </div>
           </div>
 
-          {/* Reliable Search Box Design */}
+          {/* Search Box */}
           <form
             onSubmit={submit}
-            className="relative overflow-hidden rounded-2xl border border-slate-700/80 bg-slate-900/90 p-2.5 shadow-2xl shadow-black/50 backdrop-blur-2xl ring-1 ring-white/10"
+            className="relative overflow-hidden rounded-2xl border border-slate-700/80 bg-slate-900/90 p-2 sm:p-2.5 shadow-2xl shadow-black/50 backdrop-blur-2xl ring-1 ring-white/10"
           >
-            {/* Top Gradient Border Accent */}
             <div className="absolute left-0 top-0 h-[2px] w-full bg-gradient-to-r from-pink-500 via-fuchsia-500 to-indigo-500" />
 
             <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-0">
               {/* Keyword */}
-              <div className="relative flex w-full flex-1 items-center px-4 py-3 rounded-xl bg-slate-950/50 md:bg-transparent md:border-r md:border-slate-800">
-                <Search className="mr-3 size-5 shrink-0 text-pink-400" />
-
+              <div className="relative flex w-full flex-1 items-center px-3.5 py-2.5 sm:px-4 sm:py-3 rounded-xl bg-slate-950/50 md:bg-transparent md:border-r md:border-slate-800">
+                <Search className="mr-2.5 sm:mr-3 size-4 sm:size-5 shrink-0 text-pink-400" />
                 <div className="min-w-0 flex-1">
-                  <label className="mb-0.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  <label className="mb-0.5 block text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-400">
                     What are you looking for?
                   </label>
-
                   <input
                     aria-label="Search jobs"
-                    className="w-full bg-transparent text-sm font-semibold text-white outline-none placeholder:text-slate-500"
+                    className="w-full bg-transparent text-xs sm:text-sm font-semibold text-white outline-none placeholder:text-slate-500"
                     placeholder="Job title, skill or keyword"
                     value={filters.q}
-                    onChange={(e) =>
-                      setFilters({
-                        ...filters,
-                        q: e.target.value,
-                      })
-                    }
+                    onChange={(e) => setFilters({ ...filters, q: e.target.value })}
                   />
                 </div>
               </div>
 
               {/* Location */}
-              <div className="relative flex w-full flex-1 items-center px-4 py-3 rounded-xl bg-slate-950/50 md:bg-transparent">
-                <MapPin className="mr-3 size-5 shrink-0 text-fuchsia-400" />
-
+              <div className="relative flex w-full flex-1 items-center px-3.5 py-2.5 sm:px-4 sm:py-3 rounded-xl bg-slate-950/50 md:bg-transparent">
+                <MapPin className="mr-2.5 sm:mr-3 size-4 sm:size-5 shrink-0 text-fuchsia-400" />
                 <div className="min-w-0 flex-1">
-                  <label className="mb-0.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  <label className="mb-0.5 block text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-400">
                     Where?
                   </label>
-
                   <input
                     aria-label="Location"
-                    className="w-full bg-transparent text-sm font-semibold text-white outline-none placeholder:text-slate-500"
+                    className="w-full bg-transparent text-xs sm:text-sm font-semibold text-white outline-none placeholder:text-slate-500"
                     placeholder="City, country, or remote"
                     value={filters.location}
-                    onChange={(e) =>
-                      setFilters({
-                        ...filters,
-                        location: e.target.value,
-                      })
-                    }
+                    onChange={(e) => setFilters({ ...filters, location: e.target.value })}
                   />
                 </div>
               </div>
 
-              {/* Button */}
+              {/* Submit Button */}
               <button
                 type="submit"
                 disabled={loading}
-                className="h-12 w-full shrink-0 rounded-xl bg-gradient-to-r from-pink-500 via-fuchsia-500 to-rose-500 px-8 text-sm font-bold text-white shadow-lg shadow-pink-500/25 transition duration-200 hover:-translate-y-0.5 hover:shadow-pink-500/40 disabled:cursor-not-allowed disabled:opacity-60 md:w-auto ml-0 md:ml-2"
+                className="h-11 sm:h-12 w-full shrink-0 rounded-xl bg-gradient-to-r from-pink-500 via-fuchsia-500 to-rose-500 px-6 sm:px-8 text-xs sm:text-sm font-bold text-white shadow-lg shadow-pink-500/25 transition duration-200 active:scale-[0.99] hover:shadow-pink-500/40 disabled:cursor-not-allowed disabled:opacity-60 md:w-auto ml-0 md:ml-2"
               >
                 <span className="flex items-center justify-center gap-2">
-                  {loading && (
-                    <Loader2 className="size-4 animate-spin" />
-                  )}
+                  {loading && <Loader2 className="size-4 animate-spin" />}
                   Search Jobs
                   {!loading && <ArrowRight className="size-4" />}
                 </span>
@@ -293,10 +235,10 @@ export function JobListPage({ email, role = "user" }: { email: string; role?: "u
           </form>
         </div>
 
-        {/* ================= DYNAMIC WAVE ANIMATION ================= */}
+        {/* Dynamic Wave Animation */}
         <div className="absolute bottom-0 left-0 w-full overflow-hidden leading-[0]">
           <svg
-            className="relative block h-[70px] w-full"
+            className="relative block h-[40px] sm:h-[70px] w-full"
             viewBox="0 24 150 28"
             preserveAspectRatio="none"
           >
@@ -314,7 +256,6 @@ export function JobListPage({ email, role = "user" }: { email: string; role?: "u
           </svg>
         </div>
 
-        {/* Global CSS for wave movement */}
         <style>{`
           @keyframes waveMove {
             0% { transform: translate3d(-90px, 0, 0); }
@@ -323,18 +264,9 @@ export function JobListPage({ email, role = "user" }: { email: string; role?: "u
           .animate-wave > g, .animate-wave {
             animation: waveMove 7s cubic-bezier(0.36, 0.45, 0.63, 0.53) infinite;
           }
-          .animate-wave use:nth-child(1) {
-            animation-delay: -2s;
-            animation-duration: 7s;
-          }
-          .animate-wave use:nth-child(2) {
-            animation-delay: -4s;
-            animation-duration: 10s;
-          }
-          .animate-wave use:nth-child(3) {
-            animation-delay: -6s;
-            animation-duration: 13s;
-          }
+          .animate-wave use:nth-child(1) { animation-delay: -2s; animation-duration: 7s; }
+          .animate-wave use:nth-child(2) { animation-delay: -4s; animation-duration: 10s; }
+          .animate-wave use:nth-child(3) { animation-delay: -6s; animation-duration: 13s; }
           @keyframes float {
             0%, 100% { transform: translateY(0px) rotate(0deg) scale(1); }
             50% { transform: translateY(-4px) rotate(3deg) scale(1.02); }
@@ -343,31 +275,72 @@ export function JobListPage({ email, role = "user" }: { email: string; role?: "u
       </section>
 
       {/* Main Content Layout */}
-      <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+      <main className="mx-auto max-w-7xl px-4 py-6 sm:py-10 sm:px-6 lg:px-8">
         
         {/* Header toolbar above results */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <h2 className="text-xl font-extrabold text-slate-900">Recommended jobs</h2>
-            <span className="rounded-full bg-pink-50 border border-pink-100 px-3 py-0.5 text-xs font-bold text-pink-600">
+        <div className="flex items-center justify-between gap-2 mb-4 sm:mb-6">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <h2 className="text-base sm:text-xl font-extrabold text-slate-900">Recommended jobs</h2>
+            <span className="rounded-full bg-pink-50 border border-pink-100 px-2.5 py-0.5 text-xs font-bold text-pink-600">
               {loading ? "..." : jobs.length}
             </span>
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-700 shadow-sm">
+            {/* Mobile Filter Toggle Button */}
+            <button
+              type="button"
+              onClick={() => setShowMobileFilters((prev) => !prev)}
+              className="flex lg:hidden items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 shadow-xs active:bg-slate-50"
+            >
+              <Filter className="size-3.5 text-pink-500" />
+              <span>Filters</span>
+              {activeFilterCount > 0 && (
+                <span className="grid size-4 place-items-center rounded-full bg-pink-600 text-[10px] text-white font-bold">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+
+            <div className="hidden sm:flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-700 shadow-xs">
               <SlidersHorizontal className="size-3.5 text-pink-500" />
               <span>Most recent</span>
             </div>
           </div>
         </div>
 
+        {/* Mobile Filter Panel (Collapsible under header) */}
+        {showMobileFilters && (
+          <div className="block lg:hidden mb-6 rounded-2xl border border-pink-100 bg-white p-4 shadow-sm animate-in fade-in duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal className="size-4 text-pink-600" />
+                <h3 className="font-bold text-slate-900 text-sm">Filter Jobs</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowMobileFilters(false)}
+                className="rounded-full p-1 text-slate-400 hover:bg-slate-100"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+
+            <FilterControls
+              filters={filters}
+              setFilters={setFilters}
+              loadJobs={loadJobs}
+              onClose={() => setShowMobileFilters(false)}
+            />
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           
-          {/* Left Sidebar Filters */}
-          <aside className="lg:col-span-3 bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm space-y-6 sticky top-24">
+          {/* Desktop Left Sidebar Filters */}
+          <aside className="hidden lg:block lg:col-span-3 bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs space-y-6 sticky top-24">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="font-bold text-slate-900 text-sm">Job Type</h3>
+              <h3 className="font-bold text-slate-900 text-sm">Filters</h3>
               {(filters.q || filters.location || filters.experience || filters.workType) && (
                 <button
                   type="button"
@@ -379,83 +352,26 @@ export function JobListPage({ email, role = "user" }: { email: string; role?: "u
               )}
             </div>
 
-            {/* Work Type Options */}
-            <div className="space-y-2.5 text-xs font-medium text-slate-700">
-              {[
-                { label: "Full time", value: "full_time" },
-                { label: "Part time", value: "part_time" },
-                { label: "Internship", value: "internship" },
-                { label: "Contract", value: "contract" },
-                { label: "Remote", value: "remote" },
-              ].map((item) => (
-                <label key={item.value} className="flex items-center gap-2.5 cursor-pointer hover:text-pink-600">
-                  <input
-                    type="checkbox"
-                    checked={filters.workType === item.value}
-                    onChange={(e) => {
-                      const val = e.target.checked ? item.value : "";
-                      const updated = { ...filters, workType: val };
-                      setFilters(updated);
-                      void loadJobs(updated);
-                    }}
-                    className="size-4 rounded border-slate-300 text-pink-600 focus:ring-pink-500 accent-pink-500"
-                  />
-                  {item.label}
-                </label>
-              ))}
-            </div>
-
-            {/* Salary Range Filter Section */}
-            <div className="pt-4 border-t border-slate-100">
-              <h3 className="font-bold text-slate-900 text-sm mb-3">Salary Range</h3>
-              <div className="space-y-2">
-                <input type="range" min="10" max="300" className="w-full accent-pink-500 cursor-pointer" />
-                <div className="flex justify-between text-[11px] font-semibold text-slate-400">
-                  <span>$50k</span>
-                  <span>$120k</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Experience Level Filter Section */}
-            <div className="pt-4 border-t border-slate-100 space-y-2.5">
-              <h3 className="font-bold text-slate-900 text-sm mb-3">Experience Level</h3>
-              {[
-                { label: "Entry level", value: "junior" },
-                { label: "Intermediate", value: "mid" },
-                { label: "Expert / Senior", value: "senior" },
-              ].map((item) => (
-                <label key={item.value} className="flex items-center gap-2.5 cursor-pointer hover:text-pink-600 text-xs font-medium text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={filters.experience === item.value}
-                    onChange={(e) => {
-                      const val = e.target.checked ? item.value : "";
-                      const updated = { ...filters, experience: val };
-                      setFilters(updated);
-                      void loadJobs(updated);
-                    }}
-                    className="size-4 rounded border-slate-300 text-pink-600 focus:ring-pink-500 accent-pink-500"
-                  />
-                  {item.label}
-                </label>
-              ))}
-            </div>
+            <FilterControls filters={filters} setFilters={setFilters} loadJobs={loadJobs} />
           </aside>
 
-          {/* Right Main 3-Column Grid */}
+          {/* Main Job Cards Grid */}
           <div className="lg:col-span-9">
-            {error && <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm font-medium text-red-700 mb-6">{error}</div>}
+            {error && (
+              <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-4 sm:p-5 text-xs sm:text-sm font-medium text-red-700 mb-6">
+                {error}
+              </div>
+            )}
 
             {!loading && !error && jobs.length === 0 && (
-              <div className="rounded-2xl border border-dashed border-slate-200 bg-white py-16 text-center shadow-sm">
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-white py-12 sm:py-16 text-center shadow-xs px-4">
                 <Search className="mx-auto size-8 text-slate-300" />
-                <h3 className="mt-3 font-bold text-slate-800">No matching listings found</h3>
+                <h3 className="mt-3 font-bold text-slate-800 text-sm sm:text-base">No matching listings found</h3>
                 <p className="mt-1 text-xs text-slate-500">Try adjusting your sidebar criteria or search keywords.</p>
               </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
               {jobs.map((job) => (
                 <JobCard key={job.id} job={job} />
               ))}
@@ -466,38 +382,39 @@ export function JobListPage({ email, role = "user" }: { email: string; role?: "u
       </main>
 
       {/* Floating AI Assistant Pop-up Widget */}
-      <div className="fixed bottom-6 right-6 z-50">
+      <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50">
         {!isAiPopupOpen ? (
           <button 
             onClick={() => setIsAiPopupOpen(true)}
-            className="group relative flex items-center gap-3 rounded-full bg-gradient-to-r from-pink-500 to-rose-500 p-4 text-white shadow-xl shadow-pink-500/30 transition hover:scale-105"
+            className="group relative flex items-center gap-2.5 sm:gap-3 rounded-full bg-gradient-to-r from-pink-500 to-rose-500 p-3.5 sm:p-4 text-white shadow-xl shadow-pink-500/30 transition hover:scale-105 active:scale-95"
             aria-label="Open AI Assistant"
           >
-            <span className="hidden font-bold pr-2 sm:inline">Ask AI Assistant</span>
-            <img src={heroImage} alt="" className="absolute -top-10 right-0 h-14 w-14 object-contain drop-shadow-md transition-transform group-hover:-translate-y-1" />
+            <Bot className="size-5 sm:hidden" />
+            <span className="hidden text-xs sm:text-sm font-bold pr-1 sm:inline">Ask AI Assistant</span>
+            <img src={heroImage} alt="" className="hidden sm:block absolute -top-10 right-0 h-14 w-14 object-contain drop-shadow-md transition-transform group-hover:-translate-y-1" />
           </button>
         ) : (
-          <div className="w-80 sm:w-96 rounded-3xl border border-pink-100 bg-white shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-4">
-            <div className="flex items-center justify-between bg-gradient-to-r from-pink-500 to-rose-500 px-5 py-4 text-white">
+          <div className="w-[calc(100vw-2rem)] max-w-sm sm:w-96 rounded-3xl border border-pink-100 bg-white shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-4">
+            <div className="flex items-center justify-between bg-gradient-to-r from-pink-500 to-rose-500 px-4 sm:px-5 py-3.5 sm:py-4 text-white">
               <div className="flex items-center gap-2">
                 <Bot className="size-5" />
-                <h3 className="font-bold">AI Career Assistant</h3>
+                <h3 className="font-bold text-sm sm:text-base">AI Career Assistant</h3>
               </div>
               <button onClick={() => setIsAiPopupOpen(false)} className="rounded-full p-1 hover:bg-white/20 transition">
                 <X className="size-5" />
               </button>
             </div>
-            <div className="p-5 space-y-4">
+            <div className="p-4 sm:p-5 space-y-4">
               <div className="flex items-start gap-3">
-                <div className="grid size-8 shrink-0 place-items-center rounded-full bg-pink-100 text-pink-600 font-bold">AI</div>
-                <div className="rounded-2xl bg-pink-50/70 p-3.5 text-xs leading-relaxed text-slate-700">
+                <div className="grid size-8 shrink-0 place-items-center rounded-full bg-pink-100 text-pink-600 font-bold text-xs">AI</div>
+                <div className="rounded-2xl bg-pink-50/70 p-3 sm:p-3.5 text-xs leading-relaxed text-slate-700">
                   Hi there! I can help match your resume with open positions or answer any questions about roles. What are you looking for today?
                 </div>
               </div>
               <a 
                 href="/ai-assistant" 
                 onClick={handleInternalLink} 
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-pink-500 to-rose-500 py-3 text-xs font-bold text-white shadow-md hover:opacity-95 transition"
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-pink-500 to-rose-500 py-2.5 sm:py-3 text-xs font-bold text-white shadow-md hover:opacity-95 transition"
               >
                 Open Full Assistant <ArrowRight className="size-3.5" />
               </a>
@@ -509,22 +426,114 @@ export function JobListPage({ email, role = "user" }: { email: string; role?: "u
   );
 }
 
+function FilterControls({
+  filters,
+  setFilters,
+  loadJobs,
+  onClose,
+}: {
+  filters: Filters;
+  setFilters: React.Dispatch<React.SetStateAction<Filters>>;
+  loadJobs: (f: Filters) => Promise<void>;
+  onClose?: () => void;
+}) {
+  return (
+    <div className="space-y-5">
+      {/* Work Type Options */}
+      <div>
+        <h4 className="font-bold text-slate-900 text-xs mb-2.5 uppercase tracking-wider text-slate-400">Job Type</h4>
+        <div className="space-y-2.5 text-xs font-medium text-slate-700">
+          {[
+            { label: "Full time", value: "full_time" },
+            { label: "Part time", value: "part_time" },
+            { label: "Internship", value: "internship" },
+            { label: "Contract", value: "contract" },
+            { label: "Remote", value: "remote" },
+          ].map((item) => (
+            <label key={item.value} className="flex items-center gap-2.5 cursor-pointer hover:text-pink-600">
+              <input
+                type="checkbox"
+                checked={filters.workType === item.value}
+                onChange={(e) => {
+                  const val = e.target.checked ? item.value : "";
+                  const updated = { ...filters, workType: val };
+                  setFilters(updated);
+                  void loadJobs(updated);
+                }}
+                className="size-4 rounded border-slate-300 text-pink-600 focus:ring-pink-500 accent-pink-500"
+              />
+              {item.label}
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* Salary Range Filter Section */}
+      <div className="pt-4 border-t border-slate-100">
+        <h4 className="font-bold text-slate-900 text-xs mb-2.5 uppercase tracking-wider text-slate-400">Salary Range</h4>
+        <div className="space-y-2">
+          <input type="range" min="10" max="300" className="w-full accent-pink-500 cursor-pointer" />
+          <div className="flex justify-between text-[11px] font-semibold text-slate-400">
+            <span>$50k</span>
+            <span>$120k</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Experience Level Filter Section */}
+      <div className="pt-4 border-t border-slate-100 space-y-2.5">
+        <h4 className="font-bold text-slate-900 text-xs mb-2.5 uppercase tracking-wider text-slate-400">Experience Level</h4>
+        {[
+          { label: "Entry level", value: "junior" },
+          { label: "Intermediate", value: "mid" },
+          { label: "Expert / Senior", value: "senior" },
+        ].map((item) => (
+          <label key={item.value} className="flex items-center gap-2.5 cursor-pointer hover:text-pink-600 text-xs font-medium text-slate-700">
+            <input
+              type="checkbox"
+              checked={filters.experience === item.value}
+              onChange={(e) => {
+                const val = e.target.checked ? item.value : "";
+                const updated = { ...filters, experience: val };
+                setFilters(updated);
+                void loadJobs(updated);
+              }}
+              className="size-4 rounded border-slate-300 text-pink-600 focus:ring-pink-500 accent-pink-500"
+            />
+            {item.label}
+          </label>
+        ))}
+      </div>
+
+      {onClose && (
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-4 w-full rounded-xl bg-slate-900 py-2.5 text-xs font-bold text-white hover:bg-slate-800"
+        >
+          Apply Filters
+        </button>
+      )}
+    </div>
+  );
+}
+
 function JobCard({ job }: { job: JobPost }) {
   const [saved, setSaved] = useState(false);
 
   return (
-    <article className="group flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm transition-all duration-300 hover:border-pink-300 hover:shadow-md">
+    <article className="group flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-xs transition-all duration-300 hover:border-pink-300 hover:shadow-md">
       <div>
         <div className="flex items-start justify-between gap-3 mb-3">
-          <div className="flex items-center gap-3">
-            <div className="grid size-12 shrink-0 place-items-center rounded-2xl bg-pink-50 border border-pink-100 text-base font-extrabold text-pink-600">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="grid size-10 sm:size-12 shrink-0 place-items-center rounded-2xl bg-pink-50 border border-pink-100 text-sm sm:text-base font-extrabold text-pink-600">
               {job.company.name.charAt(0)}
             </div>
-            <div>
-              <h3 className="font-bold text-slate-900 text-sm group-hover:text-pink-600 transition-colors line-clamp-1">
+            <div className="min-w-0">
+              <h3 className="font-bold text-slate-900 text-xs sm:text-sm group-hover:text-pink-600 transition-colors truncate">
                 {job.title}
               </h3>
-              <p className="text-xs text-slate-500 mt-0.5">{job.company.name} • 12 Applicants</p>
+              <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 truncate">{job.company.name} • 12 Applicants</p>
             </div>
           </div>
           <button 
@@ -535,7 +544,7 @@ function JobCard({ job }: { job: JobPost }) {
               saved ? "border-pink-200 bg-pink-50 text-pink-500" : "border-slate-200 text-slate-400 hover:bg-slate-50"
             }`}
           >
-            <Heart className={`size-4 ${saved ? "fill-current" : ""}`} />
+            <Heart className={`size-3.5 sm:size-4 ${saved ? "fill-current" : ""}`} />
           </button>
         </div>
 
@@ -557,15 +566,15 @@ function JobCard({ job }: { job: JobPost }) {
         </p>
       </div>
 
-      <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-        <div className="font-extrabold text-slate-900 text-xs flex items-center gap-1">
+      <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+        <div className="font-extrabold text-slate-900 text-xs flex items-center gap-1 min-w-0 truncate">
           <DollarSign className="size-3.5 text-emerald-500 shrink-0" /> {formatSalary(job, true)}
         </div>
 
         <a 
           href={`/jobs/${job.id}`} 
           onClick={handleInternalLink} 
-          className="inline-flex h-8 items-center gap-1 rounded-xl bg-slate-900 px-3 text-xs font-bold text-white transition hover:bg-pink-600"
+          className="inline-flex h-8 shrink-0 items-center gap-1 rounded-xl bg-slate-900 px-3 text-xs font-bold text-white transition hover:bg-pink-600"
         >
           View <ArrowRight className="size-3" />
         </a>
