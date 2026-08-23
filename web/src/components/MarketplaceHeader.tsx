@@ -1,4 +1,5 @@
 import { useState } from "react";
+<<<<<<< HEAD
 import {
   BriefcaseBusiness,
   CirclePlus,
@@ -10,6 +11,9 @@ import {
   Video,
   X,
 } from "lucide-react";
+=======
+import { BriefcaseBusiness, CirclePlus, LayoutDashboard, LogOut, Menu, MessageSquareText, Users, Video, X } from "lucide-react";
+>>>>>>> 0958137d8848e9517d136422466d3eb37232b636
 import { authClient } from "@/auth-client";
 import { handleInternalLink, navigate } from "@/navigation";
 import Logo from "@/assets/logo.png";
@@ -65,6 +69,7 @@ export function MarketplaceHeader({
 
           {role === "company" ? (
             <>
+<<<<<<< HEAD
               <a
                 href="/company/jobs"
                 onClick={handleInternalLink}
@@ -81,6 +86,11 @@ export function MarketplaceHeader({
                 <CirclePlus className="size-4" />
                 <span>Create job</span>
               </a>
+=======
+              <a href="/company/jobs" onClick={handleInternalLink} className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 hover:text-pink-600"><LayoutDashboard className="size-4" /> My job posts</a>
+              <a href="/company/applicants" onClick={handleInternalLink} className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 hover:text-pink-600"><Users className="size-4" /> Applicants</a>
+              <a href="/company/jobs/new" onClick={handleInternalLink} className="inline-flex items-center gap-2 rounded-xl bg-pink-600 px-3 py-2 text-sm font-bold text-white hover:bg-pink-700"><CirclePlus className="size-4" /> Create job</a>
+>>>>>>> 0958137d8848e9517d136422466d3eb37232b636
             </>
           ) : (
             <>
@@ -167,6 +177,7 @@ export function MarketplaceHeader({
 
             {role === "company" ? (
               <>
+<<<<<<< HEAD
                 <a
                   href="/company/jobs"
                   onClick={handleMobileNav}
@@ -183,6 +194,11 @@ export function MarketplaceHeader({
                   <CirclePlus className="size-4" />
                   <span>Create new job</span>
                 </a>
+=======
+                <a href="/company/jobs" onClick={handleInternalLink} className="rounded-xl px-3 py-2.5 text-sm font-semibold hover:bg-pink-50">My job posts</a>
+                <a href="/company/applicants" onClick={handleInternalLink} className="rounded-xl px-3 py-2.5 text-sm font-semibold hover:bg-pink-50">Applicants</a>
+                <a href="/company/jobs/new" onClick={handleInternalLink} className="rounded-xl bg-pink-600 px-3 py-2.5 text-center text-sm font-semibold text-white">Create job</a>
+>>>>>>> 0958137d8848e9517d136422466d3eb37232b636
               </>
             ) : (
               <>

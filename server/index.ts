@@ -16,12 +16,13 @@ import {
   clearCandidateProfile,
   clearEventLog,
   ownsApplicationWorkflow,
-  loadCandidateProfile,
   loadCvDocument,
   loadApplicationCvForDownload,
-  loadApplicationCvSummary,
+  loadApplicationCvSummaries,
   loadUserEmail,
-  listApplicationsForJob,
+  loadUserEmails,
+  loadCandidateProfiles,
+  listApplicationsForCompany,
   countApplicantsByJob,
   applicationExists,
   acceptApplication,
@@ -34,6 +35,7 @@ import { runApplicationWorkflow } from "../harness/applications";
 import { runInterviewInviteWorkflow } from "../harness/interviews";
 import { createCompanyJob, findJob, findJobForOwner, listJobs, listJobsForCompany } from "../harness/jobs";
 import { EventType, type ClientMessage } from "@shared/events";
+import { EMPTY_CANDIDATE_PROFILE } from "@shared/candidate";
 
 const PORT = Number(process.env.PORT ?? 8787);
 const APP_ORIGIN = process.env.APP_ORIGIN ?? "http://localhost:5173";
@@ -257,23 +259,29 @@ async function main() {
     res.status(201).json({ job });
   });
 
-  app.get("/api/company/jobs/:jobId/applicants", async (req, res) => {
+  // Every applicant across every job this company owns. The page filters by job
+  // client-side, so opening one post's applicants is a filter, not a fetch.
+  app.get("/api/company/applicants", async (req, res) => {
     try {
       const user = await authenticatedUser(req.headers);
       if (!user) return res.sendStatus(401);
       if (user.role !== "company") return res.status(403).json({ error: "A company account is required." });
-      const job = await findJobForOwner(req.params.jobId, user.id);
-      if (!job) return res.sendStatus(404);
-      const applications = await listApplicationsForJob(req.params.jobId);
-      const applicants = await Promise.all(applications.map(async (application) => {
-        const [email, profile, cv] = await Promise.all([
-          loadUserEmail(application.userId),
-          loadCandidateProfile(application.userId),
-          loadApplicationCvSummary(application.userId, application.jobId),
-        ]);
-        return { ...application, email, profile, cv };
+      const [applications, jobs] = await Promise.all([
+        listApplicationsForCompany(user.id),
+        listJobsForCompany(user.id),
+      ]);
+      const [emails, profiles, cvs] = await Promise.all([
+        loadUserEmails(applications.map((application) => application.userId)),
+        loadCandidateProfiles(applications.map((application) => application.userId)),
+        loadApplicationCvSummaries(applications),
+      ]);
+      const applicants = applications.map((application) => ({
+        ...application,
+        email: emails[application.userId] ?? null,
+        profile: profiles[application.userId] ?? structuredClone(EMPTY_CANDIDATE_PROFILE),
+        cv: cvs[`${application.userId}:${application.jobId}`] ?? null,
       }));
-      return res.json({ job, applicants });
+      return res.json({ applicants, jobs });
     } catch (error) {
       console.error("Failed to load applicants:", error);
       return res.status(500).json({ error: "Unable to load applicants." });
