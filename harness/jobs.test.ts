@@ -17,7 +17,7 @@ test("ranks matching skills and experience above partial matches", () => {
 
   assert.equal(matches[0]?.title, "Frontend Developer");
   assert.ok((matches[0]?.score ?? 0) > (matches[1]?.score ?? 0));
-  assert.deepEqual(matches[0]?.matchedSkills, ["react", "typescript"]);
+  assert.deepEqual(matches[0]?.matchedSkills, ["react", "typescript", "testing"]);
 });
 
 test("excludes jobs without a required-skill overlap", () => {

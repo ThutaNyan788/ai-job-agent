@@ -8,12 +8,16 @@ import { formatSalary, titleCase, workTypeLabel } from "./JobListPage";
 
 export function CompanyJobsPage({ email }: { email: string }) {
   const [jobs, setJobs] = useState<JobPost[]>([]);
+  const [applicantCounts, setApplicantCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    apiFetch<{ jobs: JobPost[] }>("/api/company/jobs")
-      .then((data) => setJobs(data.jobs))
+    apiFetch<{ jobs: JobPost[]; applicantCounts: Record<string, number> }>("/api/company/jobs")
+      .then((data) => {
+        setJobs(data.jobs);
+        setApplicantCounts(data.applicantCounts);
+      })
       .catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to load job posts"))
       .finally(() => setLoading(false));
   }, []);
@@ -50,7 +54,10 @@ export function CompanyJobsPage({ email }: { email: string }) {
                   <p className="text-sm font-semibold text-pink-600">{job.company.name}</p>
                   <h2 className="mt-1 text-xl font-extrabold text-slate-950">{job.title}</h2>
                 </div>
-                <StatusBadge status={job.status} />
+                <div className="flex shrink-0 flex-col items-end gap-1.5">
+                  <StatusBadge status={job.status} />
+                  <ApplicantCountBadge count={applicantCounts[job.id] ?? 0} />
+                </div>
               </div>
               <p className="mt-3 line-clamp-2 text-sm leading-6 text-slate-500">{job.description}</p>
               <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 border-t border-slate-100 pt-4 text-xs font-semibold text-slate-500">
@@ -71,6 +78,19 @@ export function CompanyJobsPage({ email }: { email: string }) {
         </div>
       </main>
     </div>
+  );
+}
+
+// How many people have applied to this role, so a company can compare its posts
+// at a glance without opening each applicants page.
+function ApplicantCountBadge({ count }: { count: number }) {
+  const classes = count === 0
+    ? "border-slate-200 bg-slate-50 text-slate-500"
+    : "border-pink-200 bg-pink-50 text-pink-700";
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold ${classes}`}>
+      <Users className="size-3.5" /> {count} applicant{count === 1 ? "" : "s"}
+    </span>
   );
 }
 

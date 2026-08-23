@@ -541,6 +541,22 @@ export async function listApplicationsForJob(jobId: string): Promise<Application
   return rows.map(rowToApplication);
 }
 
+// Applicant totals for a company's job list. Counts every application row,
+// including pending and cancelled ones, so the number on a job card matches the
+// list on that job's applicants page.
+export async function countApplicantsByJob(jobIds: string[]): Promise<Record<string, number>> {
+  const counts: Record<string, number> = {};
+  for (const jobId of jobIds) counts[jobId] = 0;
+  if (jobIds.length === 0) return counts;
+  const rows = await client<{ job_id: string; total: string }[]>`
+    SELECT job_id, COUNT(*) AS total
+    FROM applications WHERE job_id IN ${client(jobIds)}
+    GROUP BY job_id
+  `;
+  for (const row of rows) counts[row.job_id] = Number(row.total);
+  return counts;
+}
+
 export async function applicationExists(userId: string, jobId: string): Promise<boolean> {
   const rows = await client<{ found: number }[]>`
     SELECT 1 AS found FROM applications

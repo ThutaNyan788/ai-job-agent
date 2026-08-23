@@ -22,6 +22,7 @@ import {
   loadApplicationCvSummary,
   loadUserEmail,
   listApplicationsForJob,
+  countApplicantsByJob,
   applicationExists,
   acceptApplication,
   saveCvUpload,
@@ -239,7 +240,9 @@ async function main() {
     const user = await authenticatedUser(req.headers);
     if (!user) return res.sendStatus(401);
     if (user.role !== "company") return res.status(403).json({ error: "A company account is required." });
-    res.json({ jobs: await listJobsForCompany(user.id) });
+    const jobs = await listJobsForCompany(user.id);
+    const applicantCounts = await countApplicantsByJob(jobs.map((job) => job.id));
+    res.json({ jobs, applicantCounts });
   });
 
   app.post("/api/company/jobs", async (req, res) => {
