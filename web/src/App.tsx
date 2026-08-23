@@ -21,6 +21,7 @@ import { InterviewsPage } from "./components/InterviewsPage";
 import { InterviewRoomPage } from "./components/InterviewRoomPage";
 import { authClient } from "./auth-client";
 import { navigate, usePathname } from "./navigation";
+import { MarketplaceHeader } from "./components/MarketplaceHeader";
 
 export function App() {
   const { data: session, isPending } = authClient.useSession();
@@ -143,52 +144,7 @@ function AuthenticatedApp({ userId, email, role, pathname }: { userId: string; e
   return (
     <TooltipProvider delayDuration={300}>
       <div className="flex h-full flex-col">
-        <header className="flex items-center justify-between border-b px-4 py-2">
-          <span className="text-sm font-semibold tracking-tight">
-            Talent<span className="text-pink-600">AI</span>
-          </span>
-          <div className="flex items-center gap-3">
-            <span
-              className={cn(
-                "flex items-center gap-1.5 text-xs",
-                connected ? "text-emerald-600" : "text-muted-foreground",
-              )}
-            >
-              <span
-                className={cn(
-                  "size-2 rounded-full",
-                  connected ? "bg-emerald-500" : "bg-muted-foreground/50",
-                )}
-              />
-              {connected ? "connected" : "disconnected"}
-            </span>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-8"
-              onClick={toggle}
-              aria-label="Toggle theme"
-            >
-              {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
-            </Button>
-            <span className="hidden max-w-48 truncate text-xs text-muted-foreground sm:block" title={email}>
-              {email}
-            </span>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-8"
-              onClick={async () => {
-                await authClient.signOut();
-                navigate("/");
-              }}
-              aria-label="Sign out"
-              title="Sign out"
-            >
-              <LogOut className="size-4" />
-            </Button>
-          </div>
-        </header>
+            <MarketplaceHeader email={email} role={role} />
         <main className="grid min-h-0 flex-1 grid-cols-2">
           <TaskPane
             events={events}
