@@ -116,6 +116,13 @@ export type ApplicationRecord = {
   status: ApplicationStatus;
 };
 
+// An application seen from the company side, carrying the job it belongs to so
+// a cross-job list can label each row without a second lookup.
+export type CompanyApplicationRecord = ApplicationRecord & {
+  appliedAt: string;
+  jobTitle: string;
+};
+
 export const applications = pgTable(
   "applications",
   {
@@ -123,8 +130,12 @@ export const applications = pgTable(
     jobId: text("job_id").notNull(),
     workflowId: text("workflow_id").notNull(),
     status: text("status").$type<ApplicationStatus>().notNull(),
+    appliedAt: timestamp("applied_at").defaultNow().notNull(),
   },
-  (table) => [primaryKey({ columns: [table.userId, table.jobId] })],
+  (table) => [
+    primaryKey({ columns: [table.userId, table.jobId] }),
+    index("applications_job_id_idx").on(table.jobId),
+  ],
 );
 
 // The durable event-log table predates the migration system. All user-owned
@@ -528,17 +539,32 @@ export async function ownsApplicationWorkflow(userId: string, workflowId: string
   return rows.length > 0;
 }
 
-export async function listApplicationsForJob(jobId: string): Promise<ApplicationRecord[]> {
+// Every application across every job a company owns, newest first. The join is
+// what enforces ownership: a row can only come back if its job belongs to this
+// company, the same guarantee `findJobForOwner` gives on the per-job routes.
+export async function listApplicationsForCompany(
+  ownerUserId: string,
+): Promise<CompanyApplicationRecord[]> {
   const rows = await client<{
     user_id: string;
     job_id: string;
     workflow_id: string;
     status: ApplicationStatus;
+    applied_at: string | Date;
+    job_title: string | null;
   }[]>`
-    SELECT user_id, job_id, workflow_id, status
-    FROM applications WHERE job_id = ${jobId}
+    SELECT a.user_id, a.job_id, a.workflow_id, a.status, a.applied_at,
+           j.data->>'title' AS job_title
+    FROM applications a
+    JOIN job_posts j ON j.id = a.job_id
+    WHERE j.owner_user_id = ${ownerUserId}
+    ORDER BY a.applied_at DESC
   `;
-  return rows.map(rowToApplication);
+  return rows.map((row) => ({
+    ...rowToApplication(row),
+    appliedAt: new Date(row.applied_at).toISOString(),
+    jobTitle: row.job_title ?? "Untitled job post",
+  }));
 }
 
 // Applicant totals for a company's job list. Counts every application row,
@@ -571,4 +597,66 @@ export async function loadUserEmail(userId: string): Promise<string | null> {
     SELECT email FROM "user" WHERE id = ${userId}
   `;
   return rows[0]?.email ?? null;
+}
+
+// The three loaders below are batched versions of loadUserEmail,
+// loadCandidateProfile and loadApplicationCvSummary. A single job's applicant
+// list can afford three queries per applicant; a company-wide list cannot, so
+// it fetches each kind in one round trip and looks the results up by id.
+export async function loadUserEmails(userIds: string[]): Promise<Record<string, string>> {
+  if (userIds.length === 0) return {};
+  const rows = await client<{ id: string; email: string }[]>`
+    SELECT id, email FROM "user" WHERE id IN ${client(userIds)}
+  `;
+  const emails: Record<string, string> = {};
+  for (const row of rows) emails[row.id] = row.email;
+  return emails;
+}
+
+export async function loadCandidateProfiles(userIds: string[]): Promise<Record<string, CandidateProfile>> {
+  if (userIds.length === 0) return {};
+  const rows = await client<{
+    user_id: string;
+    profile_data: CandidateProfileContent;
+    profile_status: CandidateProfile["status"];
+    profile_source: CandidateProfile["source"];
+    profile_revision: number;
+  }[]>`
+    SELECT user_id, profile_data, profile_status, profile_source, profile_revision
+    FROM candidate_profiles WHERE user_id IN ${client(userIds)}
+  `;
+  const profiles: Record<string, CandidateProfile> = {};
+  for (const row of rows) {
+    profiles[row.user_id] = {
+      ...candidateProfileContentSchema.parse(row.profile_data),
+      status: row.profile_status,
+      source: row.profile_source,
+      revision: row.profile_revision,
+    };
+  }
+  return profiles;
+}
+
+// Keyed by `${userId}:${jobId}` - the same candidate can apply to several of a
+// company's posts, each with its own submitted file.
+export async function loadApplicationCvSummaries(
+  applications: { userId: string; jobId: string }[],
+): Promise<Record<string, { fileName: string; source: "uploaded" | "generated" }>> {
+  if (applications.length === 0) return {};
+  const userIds = [...new Set(applications.map((application) => application.userId))];
+  const jobIds = [...new Set(applications.map((application) => application.jobId))];
+  const rows = await client<{
+    user_id: string;
+    job_id: string;
+    file_name: string;
+    source: "uploaded" | "generated";
+  }[]>`
+    SELECT user_id, job_id, file_name, source FROM application_cv
+    WHERE user_id IN ${client(userIds)} AND job_id IN ${client(jobIds)}
+  `;
+  const summaries: Record<string, { fileName: string; source: "uploaded" | "generated" }> = {};
+  for (const row of rows) {
+    summaries[`${row.user_id}:${row.job_id}`] = { fileName: row.file_name, source: row.source };
+  }
+  return summaries;
 }

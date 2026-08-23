@@ -16,7 +16,7 @@ import { JobListPage } from "./components/JobListPage";
 import { JobDetailsPage } from "./components/JobDetailsPage";
 import { CompanyJobsPage } from "./components/CompanyJobsPage";
 import { JobPostingForm } from "./components/JobPostingForm";
-import { JobApplicantsPage } from "./components/JobApplicantsPage";
+import { ApplicantsPage } from "./components/ApplicantsPage";
 import { InterviewsPage } from "./components/InterviewsPage";
 import { InterviewRoomPage } from "./components/InterviewRoomPage";
 import { authClient } from "./auth-client";
@@ -117,10 +117,17 @@ function AuthenticatedApp({ userId, email, role, pathname }: { userId: string; e
   if (interviewRoomMatch) {
     return <InterviewRoomPage roomId={decodeURIComponent(interviewRoomMatch[1])} />;
   }
+  // A job post's applicants are the same list, opened with that post preselected
+  // in the filter - so the link from a job card still works and can be cleared.
   const applicantsMatch = pathname.match(/^\/company\/jobs\/([^/]+)\/applicants$/);
   if (applicantsMatch) {
     return role === "company"
-      ? <JobApplicantsPage jobId={decodeURIComponent(applicantsMatch[1])} email={email} events={events} />
+      ? <ApplicantsPage jobId={decodeURIComponent(applicantsMatch[1])} email={email} events={events} />
+      : <JobListPage email={email} role={role} />;
+  }
+  if (pathname === "/company/applicants") {
+    return role === "company"
+      ? <ApplicantsPage email={email} events={events} />
       : <JobListPage email={email} role={role} />;
   }
   if (pathname === "/company/jobs/new") {
