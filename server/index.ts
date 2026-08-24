@@ -14,6 +14,7 @@ import {
   ensureSchema,
   ensureAuthSchema,
   clearCandidateProfile,
+  clearChatHistory,
   clearEventLog,
   ownsApplicationWorkflow,
   loadCvDocument,
@@ -408,6 +409,7 @@ async function main() {
     if (!user) return res.sendStatus(401);
     await clearEventLog(user.id);
     await clearCandidateProfile(user.id);
+    await clearChatHistory(user.id);
     res.json({ ok: true });
   });
 

@@ -30,17 +30,21 @@ export function estimateTokens(messages: ModelMessage[]): number {
 //   · STATE    = a running SUMMARY of older turns (compacted working memory).
 //   · CONTEXT  = what the model actually sees THIS turn, assembled on demand.
 //
-// buildContext hydrates the context: the system prompt, the pinned task, the
-// summary of old work, and only the most recent turns verbatim.
+// buildContext hydrates the context: the system prompt, the summary of old
+// work, and only the most recent turns verbatim.
+//
+// The user's message used to be pinned here as a second entry, ahead of the
+// turns. That worked while a workflow only ever saw its own task, but `turns`
+// now carries the earlier conversation, and pinning would put this message
+// before the replies it is answering. The caller pushes it onto `turns`
+// instead, so the context reads in the order things actually happened.
 export function buildContext(
   systemPrompt: string,
-  task: string,
   summary: string,
   turns: ModelMessage[][],
 ): ModelMessage[] {
   const context: ModelMessage[] = [
     { role: "system", content: systemPrompt }, // the CURRENT agent's prompt
-    { role: "user", content: task }, // the goal is pinned, never summarized away
   ];
   if (summary) {
     context.push({ role: "system", content: `Summary of earlier work so far:\n${summary}` });

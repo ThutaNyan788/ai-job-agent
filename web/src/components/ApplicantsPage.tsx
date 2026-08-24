@@ -32,7 +32,7 @@ type Applicant = {
   cv: { fileName: string; source: "uploaded" | "generated" } | null;
 };
 
-type InviteState = { status: InterviewInviteStatus; error?: string };
+type InviteState = { status: InterviewInviteStatus; error?: string; videoCallLink?: string; roomId?: string };
 
 // One applicant can appear under several of the company's job posts, so every
 // per-applicant lookup on this page is keyed by the job as well as the user.
@@ -46,7 +46,12 @@ function inviteStates(events: AgentEvent[]): Record<string, InviteState> {
   const states: Record<string, InviteState> = {};
   for (const event of events) {
     if (event.type === EventType.InterviewInvite) {
-      states[`${event.jobId}:${event.applicantUserId}`] = { status: event.status, error: event.error };
+      states[`${event.jobId}:${event.applicantUserId}`] = {
+        status: event.status,
+        error: event.error,
+        videoCallLink: event.videoCallLink,
+        roomId: event.roomId,
+      };
     }
   }
   return states;
@@ -360,6 +365,16 @@ function ApplicantRow({
             >
               {accepting ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />} Accept
             </button>
+          )}
+          {invite?.status === "sent" && invite.videoCallLink && (
+            <a
+              href={invite.videoCallLink}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-9 items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-3 text-xs font-black text-emerald-700 hover:bg-emerald-100"
+            >
+              <Video className="size-3.5" /> Join Meeting
+            </a>
           )}
           <button
             type="button"

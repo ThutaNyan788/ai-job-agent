@@ -1,7 +1,7 @@
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import { EventType } from "@shared/events";
 import { emit } from "./bus";
-import { describeMailError, escapeHtml, sendMail } from "./mailer";
+import { buildEmailHtml, describeMailError, escapeHtml, sendMail } from "./mailer";
 
 export type InterviewInviteInput = {
   companyUserId: string;
@@ -28,6 +28,11 @@ async function emitInviteStatus(
       applicantUserId: input.applicantUserId,
       status,
       ...(error ? { error } : {}),
+      // Lets the company's applicants page offer a "Join Meeting" button for
+      // the same room the candidate was emailed, once delivery succeeds.
+      ...(status === "sent"
+        ? { roomId: input.roomId, videoCallLink: input.videoCallLink, scheduledFor: input.scheduledFor }
+        : {}),
     },
     input.companyUserId,
   );
@@ -45,7 +50,12 @@ async function interviewInviteWorkflow(input: InterviewInviteInput): Promise<voi
         to: input.applicantEmail,
         subject: input.subject,
         text: `${input.message}\n\nJoin the video interview: ${input.videoCallLink}`,
-        html: `<p>${escapeHtml(input.message).replace(/\n/g, "<br />")}</p><p><strong>Join the video interview:</strong> <a href="${escapeHtml(input.videoCallLink)}">${escapeHtml(input.videoCallLink)}</a></p>`,
+        html: buildEmailHtml({
+          preheader: input.message.slice(0, 140),
+          bodyHtml: `<p style="margin:0 0 8px;">${escapeHtml(input.message).replace(/\n/g, "<br />")}</p>`,
+          ctaText: "Join the video interview",
+          ctaUrl: input.videoCallLink,
+        }),
       }),
       { name: "send-invitation-email", retriesAllowed: false },
     );

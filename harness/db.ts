@@ -1,6 +1,7 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { bigserial, index, integer, jsonb, pgTable, primaryKey, real, text, timestamp } from "drizzle-orm/pg-core";
+import type { ModelMessage } from "ai";
 import type { AgentEvent, ApplicationStatus, JobPost } from "@shared/events";
 import {
   candidateProfileContentSchema,
@@ -28,6 +29,16 @@ export async function closeDatabase(): Promise<void> {
 export const eventLog = pgTable("event_log", {
   seq: bigserial("seq", { mode: "number" }).primaryKey(),
   data: jsonb("data").$type<AgentEvent>().notNull(),
+});
+
+// The chat agent's memory between messages. `turns` is the same recent-turns
+// window the workflow keeps in memory, and `summary` the compaction of what
+// fell out of it - stored together because they are only ever correct together.
+export const chatHistory = pgTable("chat_history", {
+  userId: text("user_id").primaryKey(),
+  turns: jsonb("turns").$type<ModelMessage[][]>().notNull(),
+  summary: text("summary").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 export const jobPosts = pgTable(
@@ -158,6 +169,31 @@ export async function ensureAuthSchema(): Promise<void> {
       "Better Auth tables are missing. Run `npm run db:migrate` against the same DATABASE_URL, then restart the server.",
     );
   }
+}
+
+export type ChatHistory = { turns: ModelMessage[][]; summary: string };
+
+export async function loadChatHistory(userId: string): Promise<ChatHistory> {
+  const rows = await client<{ turns: ModelMessage[][]; summary: string }[]>`
+    SELECT turns, summary FROM chat_history WHERE user_id = ${userId}
+  `;
+  const row = rows[0];
+  return { turns: row?.turns ?? [], summary: row?.summary ?? "" };
+}
+
+// The whole window is rewritten, not appended to: compaction drops turns off
+// the front, so the stored array only stays truthful if it is replaced wholesale.
+export async function saveChatHistory(userId: string, history: ChatHistory): Promise<void> {
+  await client`
+    INSERT INTO chat_history (user_id, turns, summary)
+    VALUES (${userId}, ${JSON.stringify(history.turns)}::jsonb, ${history.summary})
+    ON CONFLICT (user_id) DO UPDATE SET
+      turns = EXCLUDED.turns, summary = EXCLUDED.summary, updated_at = now()
+  `;
+}
+
+export async function clearChatHistory(userId: string): Promise<void> {
+  await client`DELETE FROM chat_history WHERE user_id = ${userId}`;
 }
 
 export async function clearEventLog(userId: string): Promise<void> {

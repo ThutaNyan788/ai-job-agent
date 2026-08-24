@@ -135,6 +135,11 @@ export type InterviewInviteEvent = {
   applicantUserId: string;
   status: InterviewInviteStatus;
   error?: string;
+  // Present once status is "sent" - lets the company join the same Zego room
+  // they invited the candidate to.
+  roomId?: string;
+  videoCallLink?: string;
+  scheduledFor?: string;
 };
 
 export type EventInput =

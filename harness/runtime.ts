@@ -5,6 +5,7 @@ import { EventType, type JobMatch } from "@shared/events";
 import { emit, emitTransient } from "./bus";
 import { jobSeekerAgent } from "./agents";
 import { chatProviderOptions, model } from "./model";
+import { loadChatHistory, saveChatHistory } from "./db";
 import { getCandidateProfile, getLatestCvPreview, runTool } from "./tools";
 import {
   buildContext,
@@ -132,17 +133,32 @@ async function agentWorkflow(input: JobWorkflowInput): Promise<string> {
   // database is ~250ms+. These three used to run one after another, so the user
   // waited on all of them before the model was even called. They are independent,
   // so they run as one step, concurrently.
-  const [, [loadedProfile, loadedPreview]] = await DBOS.runStep(
+  const [, [loadedProfile, loadedPreview, loadedHistory]] = await DBOS.runStep(
     () => Promise.all([
       emit({ type: EventType.WorkflowStarted, workflowId, input: input.message }, input.userId),
-      Promise.all([getCandidateProfile(input.userId), getLatestCvPreview(input.userId)]),
+      Promise.all([
+        getCandidateProfile(input.userId),
+        getLatestCvPreview(input.userId),
+        loadChatHistory(input.userId),
+      ]),
     ]),
     { name: "start-and-load" },
   );
   let profile = loadedProfile;
   let pendingPreview = loadedPreview;
-  const turns: ModelMessage[][] = [];
-  let summary = "";
+
+  // Each user message runs as its own workflow, so without this the model saw
+  // only the system prompt and the latest message - it would ask for a name it
+  // had already been given. The turns and summary are the conversation.
+  const turns: ModelMessage[][] = loadedHistory.turns;
+  let summary = loadedHistory.summary;
+
+  const attachmentContext = input.attachments?.length
+    ? `\n\nAttached files:\n${input.attachments.map((file) => `- ${file.name} (uploadId: ${file.id}, kind: ${file.kind})`).join("\n")}`
+    : "";
+  // The message joins the transcript rather than being pinned ahead of it, so
+  // it lands after the replies it is responding to. See buildContext.
+  turns.push([{ role: "user", content: input.message + attachmentContext }]);
 
   for (let step = 0; step < MAX_STEPS; step++) {
     if (estimateTokens(turns.flat()) > MAX_CONTEXT_TOKENS) {
@@ -161,7 +177,6 @@ async function agentWorkflow(input: JobWorkflowInput): Promise<string> {
             contextTokens: estimateTokens(
               buildContext(
                 jobSeekerAgent.systemPrompt(profile, pendingPreview?.previewId),
-                input.message,
                 summary,
                 turns,
               ),
@@ -173,12 +188,8 @@ async function agentWorkflow(input: JobWorkflowInput): Promise<string> {
       }
     }
 
-    const attachmentContext = input.attachments?.length
-      ? `\n\nAttached files:\n${input.attachments.map((file) => `- ${file.name} (uploadId: ${file.id}, kind: ${file.kind})`).join("\n")}`
-      : "";
     const context = buildContext(
       jobSeekerAgent.systemPrompt(profile, pendingPreview?.previewId),
-      input.message + attachmentContext,
       summary,
       turns,
     );
@@ -186,6 +197,11 @@ async function agentWorkflow(input: JobWorkflowInput): Promise<string> {
     const turnMessages: ModelMessage[] = [...turn.responseMessages];
 
     if (turn.toolCalls.length === 0) {
+      turns.push(turnMessages);
+      // Saved only once the turn is finished, so a crash mid-tool-loop leaves
+      // no half-turn behind - an assistant tool call with no matching result is
+      // a context the model cannot be sent.
+      await DBOS.runStep(() => saveChatHistory(input.userId, { turns, summary }), { name: "save-history" });
       await DBOS.runStep(() => emit({ type: EventType.ModelCompleted, workflowId, text: turn.text }, input.userId), {
         name: `model-done-${step}`,
       });
@@ -210,6 +226,9 @@ async function agentWorkflow(input: JobWorkflowInput): Promise<string> {
     turns.push(turnMessages);
   }
 
+  // The turns here are whole and paired, so they are worth keeping - the user
+  // should not have to repeat themselves because the agent ran long.
+  await DBOS.runStep(() => saveChatHistory(input.userId, { turns, summary }), { name: "save-history-at-limit" });
   await DBOS.runStep(
     () => emit({ type: EventType.WorkflowFailed, workflowId, error: `Hit the ${MAX_STEPS}-step limit without finishing.` }, input.userId),
     { name: "failed" },
