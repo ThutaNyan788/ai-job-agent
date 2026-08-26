@@ -19,5 +19,13 @@ export default defineConfig({
     port: 5173,
     // allow importing files from outside web/ (i.e. shared/)
     fs: { allow: [fileURLToPath(new URL(".", import.meta.url))] },
+    allowedHosts: ["localhost", "unmashed-automatically-hortense.ngrok-free.dev"],
+    // The backend (Express + auth + the harness WebSocket) runs as a separate
+    // process on :8787. Proxy it through here so a single ngrok tunnel to
+    // this dev server is enough to reach the whole app.
+    proxy: {
+      "/api": "http://localhost:8787",
+      "/ws": { target: "ws://localhost:8787", ws: true },
+    },
   },
 });

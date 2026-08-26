@@ -40,6 +40,8 @@ import { EMPTY_CANDIDATE_PROFILE } from "@shared/candidate";
 
 const PORT = Number(process.env.PORT ?? 8787);
 const APP_ORIGIN = process.env.APP_ORIGIN ?? "http://localhost:5173";
+// Local dev (localhost:5173) and the ngrok tunnel both need to reach the API/WS.
+const ALLOWED_ORIGINS = Array.from(new Set(["http://localhost:5173", APP_ORIGIN]));
 
 const scheduleInterviewSchema = z.object({
   date: z.string().trim().min(1).max(40),
@@ -146,8 +148,9 @@ async function main() {
 
   const app = express();
   app.use((req, res, next) => {
-    if (req.headers.origin === APP_ORIGIN) {
-      res.setHeader("Access-Control-Allow-Origin", APP_ORIGIN);
+    const origin = req.headers.origin;
+    if (origin && ALLOWED_ORIGINS.includes(origin)) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
       res.setHeader("Access-Control-Allow-Credentials", "true");
     }
     res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -433,7 +436,7 @@ async function main() {
     void (async () => {
       const path = new URL(request.url ?? "/", "http://localhost").pathname;
       if (path !== "/ws") return socket.destroy();
-      if (request.headers.origin !== APP_ORIGIN) {
+      if (!request.headers.origin || !ALLOWED_ORIGINS.includes(request.headers.origin)) {
         socket.write("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
         return socket.destroy();
       }
